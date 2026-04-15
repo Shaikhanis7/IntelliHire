@@ -1,9 +1,12 @@
 // features/landing/components/FeaturesSection.tsx
-// Light luxury — ivory cards, gold/teal/indigo accent icons
+// Fully responsive — mobile-first layout
 
 import React, { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
-import { Brain, Sparkles, BarChart3, Zap, Globe, Shield, TrendingUp } from 'lucide-react';
+import {
+  Brain, Sparkles, BarChart3, Zap, Globe, Shield, TrendingUp,
+  Briefcase, Award,
+} from 'lucide-react';
 import { C, FONTS } from '../tokens/tokens';
 import { Pill, MeshBg, SectionHeader } from './Primitives';
 
@@ -16,6 +19,13 @@ const FEATURES = [
   { Icon: Globe,     title: 'External Board Scraping', desc: 'Rotate LLM-generated query variants across boards. New candidates only — not duplicates you already have.',       color: C.teal,   bg: C.tealDim   },
   { Icon: Shield,    title: 'Role-Based Access',        desc: 'Recruiters and candidates each get a secure, tailored experience. Zero data leakage between roles.',               color: C.indigo, bg: C.indigoDim },
 ];
+
+/* ─── Responsive section padding helper ─────────────────────────────────────── */
+const sectionStyle = (bg: string): React.CSSProperties => ({
+  padding: 'clamp(64px, 10vh, 110px) clamp(20px, 5vw, calc((100vw - 1240px)/2 + 20px))',
+  background: bg,
+  position: 'relative',
+});
 
 /* ─── Single feature card ────────────────────────────────────────────────────── */
 const FeatureCard: React.FC<{
@@ -33,14 +43,15 @@ const FeatureCard: React.FC<{
       transition={{ duration: 0.6, delay: index * 0.08, ease: [0.22, 1, 0.36, 1] }}
       whileHover={{ y: -6, boxShadow: C.shadowHov, borderColor: color + '44' }}
       style={{
-        padding: '28px 26px',
+        padding: 'clamp(20px, 3vw, 28px) clamp(18px, 2.5vw, 26px)',
         border: `1px solid ${C.border}`,
         borderRadius: 18,
         background: C.bgCard,
         boxShadow: C.shadow,
         transition: 'border-color 0.25s, box-shadow 0.25s, transform 0.25s',
         cursor: 'default',
-        position: 'relative', overflow: 'hidden',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
       {/* Top accent line on hover */}
@@ -58,18 +69,34 @@ const FeatureCard: React.FC<{
         whileHover={{ scale: 1.1, rotate: -7 }}
         transition={{ type: 'spring', stiffness: 300 }}
         style={{
-          width: 48, height: 48, borderRadius: 14, marginBottom: 20,
-          background: bg, border: `1px solid ${color}22`,
+          width: 48, height: 48, borderRadius: 14,
+          marginBottom: 'clamp(14px, 2.5vw, 20px)',
+          background: bg,
+          border: `1px solid ${color}22`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
         <Icon size={21} color={color} strokeWidth={1.7} />
       </motion.div>
 
-      <h3 style={{ fontSize: 17, fontWeight: 700, color: C.text, marginBottom: 11, letterSpacing: '-0.3px', fontFamily: FONTS.display }}>
+      <h3 style={{
+        fontSize: 'clamp(15px, 2vw, 17px)',
+        fontWeight: 700,
+        color: C.text,
+        marginBottom: 11,
+        letterSpacing: '-0.3px',
+        fontFamily: FONTS.display,
+      }}>
         {title}
       </h3>
-      <p style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.78, margin: 0 }}>{desc}</p>
+      <p style={{
+        fontSize: 'clamp(13px, 1.5vw, 14px)',
+        color: C.textMuted,
+        lineHeight: 1.78,
+        margin: 0,
+      }}>
+        {desc}
+      </p>
     </motion.div>
   );
 };
@@ -80,7 +107,7 @@ export const FeaturesSection: React.FC = () => {
   const isInView = useInView(ref, { once: true, margin: '-80px' });
 
   return (
-    <section id="features" style={{ padding: '110px max(24px, calc((100vw - 1240px)/2))', background: C.bg, position: 'relative' }}>
+    <section id="features" style={sectionStyle(C.bg)}>
       <div ref={ref}>
         <SectionHeader
           inView={isInView}
@@ -91,7 +118,12 @@ export const FeaturesSection: React.FC = () => {
           subtitle="From parsing to pipeline — IntelliHire automates the tedious so your team can focus on what matters."
         />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 18 }}>
+      {/* Responsive grid: 3-col → 2-col → 1-col */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+        gap: 18,
+      }}>
         {FEATURES.map((f, i) => <FeatureCard key={i} {...f} index={i} />)}
       </div>
     </section>
@@ -99,7 +131,10 @@ export const FeaturesSection: React.FC = () => {
 };
 
 /* ─── Marquee ticker ─────────────────────────────────────────────────────────── */
-const MARQUEE_ITEMS = ['AI Sourcing', 'Resume Scoring', 'Smart Shortlisting', 'Pipeline Automation', 'Dual-Engine Ranking', 'External Board Scraping', 'Role-Based Access', 'Fit Summaries'];
+const MARQUEE_ITEMS = [
+  'AI Sourcing', 'Resume Scoring', 'Smart Shortlisting', 'Pipeline Automation',
+  'Dual-Engine Ranking', 'External Board Scraping', 'Role-Based Access', 'Fit Summaries',
+];
 
 export const Marquee: React.FC = () => (
   <div style={{
@@ -107,7 +142,8 @@ export const Marquee: React.FC = () => (
     background: C.panel,
     borderTop: `1px solid ${C.panelBorder}`,
     borderBottom: `1px solid ${C.panelBorder}`,
-    overflow: 'hidden', position: 'relative',
+    overflow: 'hidden',
+    position: 'relative',
   }}>
     <motion.div
       animate={{ x: [0, -52 * MARQUEE_ITEMS.length] }}
@@ -130,8 +166,6 @@ export const Marquee: React.FC = () => (
 );
 
 /* ─── How It Works section ───────────────────────────────────────────────────── */
-import { Briefcase, Award } from 'lucide-react';
-
 const HOW_STEPS = [
   { n: '01', Icon: Briefcase,  title: 'Post a job',         desc: 'Define the role, required skills, and experience level. Takes under 2 minutes.',    accent: C.gold,  bg: C.goldDim  },
   { n: '02', Icon: Brain,      title: 'AI sources talent',  desc: 'Sourcing agent scans your DB and external boards, filtering by eligibility.',         accent: C.teal,  bg: C.tealDim  },
@@ -144,10 +178,13 @@ export const HowSection: React.FC = () => {
   const isInView = useInView(ref, { once: true, margin: '-80px' });
 
   return (
-    <section id="how-it-works" style={{
-      padding: '110px max(24px, calc((100vw - 1240px)/2))',
-      background: C.surface, position: 'relative', overflow: 'hidden',
-    }}>
+    <section
+      id="how-it-works"
+      style={{
+        ...sectionStyle(C.surface),
+        overflow: 'hidden',
+      }}
+    >
       <MeshBg />
 
       <div ref={ref} style={{ position: 'relative' }}>
@@ -160,46 +197,77 @@ export const HowSection: React.FC = () => {
           subtitle="IntelliHire handles the heavy lifting so your team can spend time on people, not process."
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20 }}>
+        {/* Responsive grid: 4-col → 2-col → 1-col */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
+          gap: 20,
+        }}>
           {HOW_STEPS.map(({ n, Icon, title, desc, accent, bg }, i) => {
             const stepRef = useRef(null);
             const inView  = useInView(stepRef, { once: true, margin: '-60px' });
             return (
               <motion.div
-                key={i} ref={stepRef}
+                key={i}
+                ref={stepRef}
                 initial={{ opacity: 0, y: 36 }}
                 animate={inView ? { opacity: 1, y: 0 } : {}}
                 transition={{ duration: 0.6, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}
                 whileHover={{ y: -5, boxShadow: C.shadowHov }}
                 style={{
-                  background: C.bgCard, border: `1px solid ${C.border}`,
-                  borderRadius: 18, padding: '30px 26px',
-                  boxShadow: C.shadow, position: 'relative', overflow: 'hidden',
+                  background: C.bgCard,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 18,
+                  padding: 'clamp(20px, 3vw, 30px) clamp(18px, 2.5vw, 26px)',
+                  boxShadow: C.shadow,
+                  position: 'relative',
+                  overflow: 'hidden',
                   transition: 'box-shadow 0.25s, transform 0.25s',
                 }}
               >
                 {/* Number watermark */}
                 <span style={{
                   position: 'absolute', top: 10, right: 16,
-                  fontSize: 62, fontWeight: 900,
+                  fontSize: 'clamp(42px, 7vw, 62px)',
+                  fontWeight: 900,
                   color: `${accent}09`,
                   lineHeight: 1, letterSpacing: '-4px', userSelect: 'none',
                   fontFamily: FONTS.display,
-                }}>{n}</span>
+                }}>
+                  {n}
+                </span>
 
                 <motion.div
                   whileHover={{ scale: 1.1 }}
                   style={{
-                    width: 46, height: 46, borderRadius: 13, marginBottom: 20,
-                    background: bg, border: `1px solid ${accent}22`,
+                    width: 46, height: 46, borderRadius: 13,
+                    marginBottom: 'clamp(14px, 2.5vw, 20px)',
+                    background: bg,
+                    border: `1px solid ${accent}22`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}
                 >
                   <Icon size={20} color={accent} strokeWidth={1.7} />
                 </motion.div>
 
-                <h3 style={{ fontSize: 16.5, fontWeight: 700, color: C.text, marginBottom: 10, letterSpacing: '-0.2px', fontFamily: FONTS.display }}>{title}</h3>
-                <p style={{ fontSize: 14, color: C.textMuted, lineHeight: 1.75, margin: 0 }}>{desc}</p>
+                <h3 style={{
+                  fontSize: 'clamp(14.5px, 2vw, 16.5px)',
+                  fontWeight: 700,
+                  color: C.text,
+                  marginBottom: 10,
+                  letterSpacing: '-0.2px',
+                  fontFamily: FONTS.display,
+                }}>
+                  {title}
+                </h3>
+                <p style={{
+                  fontSize: 'clamp(13px, 1.5vw, 14px)',
+                  color: C.textMuted,
+                  lineHeight: 1.75,
+                  margin: 0,
+                }}>
+                  {desc}
+                </p>
               </motion.div>
             );
           })}
