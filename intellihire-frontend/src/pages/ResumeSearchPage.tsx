@@ -113,7 +113,7 @@ const ResumeSearchPage: React.FC = () => {
                 <Filter className="h-4 w-4 mr-2" />
                 Advanced Filters
               </Button>
-              <Button variant="primary">
+              <Button variant="default">
                 <Search className="h-4 w-4 mr-2" />
                 Search
               </Button>
