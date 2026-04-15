@@ -417,7 +417,8 @@ const ApplicationsPage: React.FC = () => {
 
   const handleJobSelect = (j: Job | null) => { setSelectedJob(j); filter.clearFilters(); };
 
-  if (user?.role !== 'recruiter') return (
+  if (user?.role !== 'recruiter' && user?.role !== 'admin'
+  ) return (
     <div style={{ maxWidth: 400, margin: '80px auto', textAlign: 'center', fontFamily: "'DM Sans', system-ui, sans-serif", padding: 24 }}>
       <Card style={{ padding: 48 }}>
         <AlertCircle size={36} style={{ color: C.danger, display: 'block', margin: '0 auto 14px' }} />
