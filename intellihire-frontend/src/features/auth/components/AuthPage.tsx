@@ -2,6 +2,7 @@
 // Aesthetic: Crisp light — warm white, slate navy, soft shadows
 // Fonts: DM Sans (body) + Fraunces (display)
 // Motion: Framer Motion — panel slide, staggered reveals, shake on error
+// Responsive: mobile-first, single-column < 640px, split-panel ≥ 880px
 
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -12,9 +13,24 @@ import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import {
   Mail, Lock, User, Eye, EyeOff, ArrowRight,
   Sparkles, Shield, Zap, Users, Briefcase,
-  AlertCircle, CheckCircle2,
+  AlertCircle, CheckCircle2, ChevronLeft,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+
+/* ─── Breakpoints ────────────────────────────────────────────────────────────── */
+const BP = { sm: 640, md: 880 } as const;
+
+function useWindowWidth(): number {
+  const [width, setWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : BP.md,
+  );
+  useEffect(() => {
+    const handler = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  return width;
+}
 
 /* ─── Design tokens ─────────────────────────────────────────────────────────── */
 const C = {
@@ -45,27 +61,24 @@ const C = {
   shadowLg:     '0 20px 60px rgba(15,23,42,0.14), 0 4px 16px rgba(15,23,42,0.08)',
 };
 
-/* ─── Error lookup tables ────────────────────────────────────────────────────
-   Keys are lowercase substrings of the FastAPI `detail` string.
-   First match wins — most specific entries go first.
-────────────────────────────────────────────────────────────────────────────── */
+/* ─── Error lookup tables ────────────────────────────────────────────────────── */
 const LOGIN_ERRORS: Array<[string, string]> = [
-  ['invalid email or password',  'Incorrect email or password. Please try again.'],
-  ['invalid',                    'Incorrect email or password. Please try again.'],
-  ['unauthorized',               'Incorrect email or password. Please try again.'],
-  ['credential',                 'Incorrect email or password. Please try again.'],
-  ['not found',                  'No account found with this email address.'],
-  ['no account',                 'No account found with this email address.'],
-  ['network',                    'Connection error. Please check your internet and try again.'],
-  ['fetch',                      'Connection error. Please check your internet and try again.'],
+  ['invalid email or password', 'Incorrect email or password. Please try again.'],
+  ['invalid',                   'Incorrect email or password. Please try again.'],
+  ['unauthorized',              'Incorrect email or password. Please try again.'],
+  ['credential',                'Incorrect email or password. Please try again.'],
+  ['not found',                 'No account found with this email address.'],
+  ['no account',                'No account found with this email address.'],
+  ['network',                   'Connection error. Please check your internet and try again.'],
+  ['fetch',                     'Connection error. Please check your internet and try again.'],
 ];
 
 const SIGNUP_ERRORS: Array<[string, string]> = [
-  ['already exists',             'An account with this email already exists. Try signing in instead.'],
-  ['already',                    'An account with this email already exists. Try signing in instead.'],
-  ['exists',                     'An account with this email already exists. Try signing in instead.'],
-  ['network',                    'Connection error. Please check your internet and try again.'],
-  ['fetch',                      'Connection error. Please check your internet and try again.'],
+  ['already exists',            'An account with this email already exists. Try signing in instead.'],
+  ['already',                   'An account with this email already exists. Try signing in instead.'],
+  ['exists',                    'An account with this email already exists. Try signing in instead.'],
+  ['network',                   'Connection error. Please check your internet and try again.'],
+  ['fetch',                     'Connection error. Please check your internet and try again.'],
 ];
 
 function friendlyMessage(
@@ -88,7 +101,7 @@ const loginSchema = z.object({
 });
 
 const signupSchema = z.object({
-  name:     z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long'),
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long'),
   email:    z.string().email('Please enter a valid email address'),
   password: z
     .string()
@@ -210,7 +223,7 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => (
 );
 
 /* ─── Login form ─────────────────────────────────────────────────────────────── */
-const LoginForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
+const LoginForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSwitch, isMobile }) => {
   const { login, isLoading, error, clearError } = useAuth();
   const navigate  = useNavigate();
   const [showPw, setShowPw] = useState(false);
@@ -221,11 +234,8 @@ const LoginForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
 
   useEffect(() => () => clearError(), [clearError]);
 
-  // Lookup table replaces brittle inline keyword chain
   const friendlyError = friendlyMessage(
-    error,
-    LOGIN_ERRORS,
-    'Sign in failed. Please check your credentials and try again.',
+    error, LOGIN_ERRORS, 'Sign in failed. Please check your credentials and try again.',
   );
 
   const onSubmit = async (data: LoginData) => {
@@ -233,7 +243,6 @@ const LoginForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
       await login(data);
       navigate('/dashboard');
     } catch {
-      // error is already in Redux state — just trigger shake
       controls.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.5 } });
     }
   };
@@ -293,12 +302,21 @@ const LoginForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
         }}>
         Create an account
       </motion.button>
+
+      {isMobile && (
+        <p style={{ textAlign: 'center', fontSize: 11, color: C.textFaint, marginTop: 16 }}>
+          By signing in, you agree to our{' '}
+          <a href="#" style={{ color: C.blue, textDecoration: 'none' }}>Terms</a>
+          {' '}and{' '}
+          <a href="#" style={{ color: C.blue, textDecoration: 'none' }}>Privacy Policy</a>
+        </p>
+      )}
     </motion.form>
   );
 };
 
 /* ─── Signup form ────────────────────────────────────────────────────────────── */
-const SignupForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
+const SignupForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSwitch, isMobile }) => {
   const { register: registerUser, isLoading, error, clearError } = useAuth();
   const navigate  = useNavigate();
   const [showPw, setShowPw] = useState(false);
@@ -310,11 +328,8 @@ const SignupForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
 
   useEffect(() => () => clearError(), [clearError]);
 
-  // Lookup table replaces brittle inline keyword chain
   const friendlyError = friendlyMessage(
-    error,
-    SIGNUP_ERRORS,
-    'Registration failed. Please try again.',
+    error, SIGNUP_ERRORS, 'Registration failed. Please try again.',
   );
 
   const onSubmit = async (data: SignupData) => {
@@ -323,7 +338,6 @@ const SignupForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
       await registerUser(rest);
       navigate('/dashboard');
     } catch {
-      // error is already in Redux state — just trigger shake
       controls.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.5 } });
     }
   };
@@ -377,6 +391,15 @@ const SignupForm: React.FC<{ onSwitch: () => void }> = ({ onSwitch }) => {
         }}>
         Sign in instead
       </motion.button>
+
+      {isMobile && (
+        <p style={{ textAlign: 'center', fontSize: 11, color: C.textFaint, marginTop: 16 }}>
+          By signing up, you agree to our{' '}
+          <a href="#" style={{ color: C.blue, textDecoration: 'none' }}>Terms</a>
+          {' '}and{' '}
+          <a href="#" style={{ color: C.blue, textDecoration: 'none' }}>Privacy Policy</a>
+        </p>
+      )}
     </motion.form>
   );
 };
@@ -398,7 +421,37 @@ const Divider: React.FC<{ text: string }> = ({ text }) => (
   </div>
 );
 
-/* ─── Panel content ──────────────────────────────────────────────────────────── */
+/* ─── Mobile header bar (replaces the navy panel on small screens) ───────────── */
+const MobileHeader: React.FC<{ isLogin: boolean }> = ({ isLogin }) => (
+  <div style={{
+    background: C.gradPanel,
+    padding: '20px 24px',
+    display: 'flex', alignItems: 'center', gap: 12,
+  }}>
+    <div style={{
+      width: 34, height: 34, borderRadius: 10,
+      background: 'rgba(255,255,255,0.15)',
+      border: '1px solid rgba(255,255,255,0.25)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      <Briefcase size={16} color="#fff" />
+    </div>
+    <div>
+      <span style={{
+        fontSize: 17, fontWeight: 700, color: '#fff',
+        letterSpacing: '-0.3px', fontFamily: "'Fraunces', serif",
+        display: 'block', lineHeight: 1.2,
+      }}>
+        IntelliHire
+      </span>
+      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>
+        {isLogin ? 'Welcome back' : 'Start hiring smarter'}
+      </span>
+    </div>
+  </div>
+);
+
+/* ─── Panel content (desktop) ────────────────────────────────────────────────── */
 const FEATURES_LOGIN = [
   { icon: Sparkles,     text: 'AI-powered resume search'  },
   { icon: Zap,          text: 'Fast candidate matching'   },
@@ -423,6 +476,7 @@ const PanelContent: React.FC<{ isLogin: boolean }> = ({ isLogin }) => {
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
         style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
       >
+        {/* Decorative blobs */}
         <div style={{ position: 'absolute', top: -60, right: -60, width: 220, height: 220, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 65%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: -40, left: -40, width: 180, height: 180, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 65%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)`, backgroundSize: '40px 40px', pointerEvents: 'none' }} />
@@ -441,8 +495,8 @@ const PanelContent: React.FC<{ isLogin: boolean }> = ({ isLogin }) => {
           <div style={{ marginBottom: 36 }}>
             <h2 style={{ fontSize: 34, fontWeight: 800, color: '#fff', lineHeight: 1.12, letterSpacing: '-1.2px', marginBottom: 14, fontFamily: "'Fraunces', serif" }}>
               {isLogin
-                ? <>Welcome<br /><span style={{ color: 'rgba(255,255,255,0.65)' }}>back.</span></>
-                : <>Start hiring<br /><span style={{ color: 'rgba(255,255,255,0.65)' }}>smarter.</span></>}
+                ? <><span>Welcome</span><br /><span style={{ color: 'rgba(255,255,255,0.65)' }}>back.</span></>
+                : <><span>Start hiring</span><br /><span style={{ color: 'rgba(255,255,255,0.65)' }}>smarter.</span></>}
             </h2>
             <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 1.7, margin: 0 }}>
               {isLogin
@@ -479,12 +533,78 @@ const PanelContent: React.FC<{ isLogin: boolean }> = ({ isLogin }) => {
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin]           = useState(true);
   const [panelIsLogin, setPanelIsLogin] = useState(true);
+  const width = useWindowWidth();
+
+  const isMobile = width < BP.sm;
+  const isTablet = width >= BP.sm && width < BP.md;
 
   const switchMode = () => {
     setTimeout(() => setPanelIsLogin(v => !v), 280);
     setIsLogin(v => !v);
   };
 
+  // ── Padding based on viewport ──
+  const formPadH  = isMobile ? 24 : isTablet ? 28 : 38;
+  const formPadV  = isMobile ? 28 : 36;
+  const panelPad  = isTablet ? '32px 28px' : '40px 36px';
+  const cardRadius = isMobile ? 0 : 22;
+  const cardMaxW   = isMobile ? '100%' : 880;
+  const cardHeight = isMobile
+    ? '100%'
+    : isTablet
+    ? 'min(700px, calc(100vh - 40px))'
+    : 'min(660px, calc(100vh - 40px))';
+
+  /* ── Mobile layout — single column, stacked ── */
+  if (isMobile) {
+    return (
+      <div style={{
+        minHeight: '100dvh',
+        background: C.bg,
+        display: 'flex', flexDirection: 'column',
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+      }}>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,wght@0,700;0,800;1,700&display=swap');
+          * { box-sizing: border-box; }
+          ::selection { background: rgba(37,99,235,0.18); color: #1e3a8a; }
+          input::placeholder { color: #c1cada; }
+        `}</style>
+
+        {/* Navy top bar */}
+        <MobileHeader isLogin={isLogin} />
+
+        {/* Form area */}
+        <div style={{ flex: 1, overflowY: 'auto', background: C.surface, padding: `${formPadV}px ${formPadH}px` }}>
+          <AnimatePresence mode="wait">
+            {isLogin ? (
+              <motion.div key="login-mobile"
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.25 }}>
+                <div style={{ marginBottom: 22 }}>
+                  <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 4, fontFamily: "'Fraunces', serif" }}>Welcome back</h2>
+                  <p style={{ fontSize: 13.5, color: C.textMuted, margin: 0 }}>Sign in to your account</p>
+                </div>
+                <LoginForm onSwitch={switchMode} isMobile />
+              </motion.div>
+            ) : (
+              <motion.div key="signup-mobile"
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.25 }}>
+                <div style={{ marginBottom: 22 }}>
+                  <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 4, fontFamily: "'Fraunces', serif" }}>Create Account</h2>
+                  <p style={{ fontSize: 13.5, color: C.textMuted, margin: 0 }}>Join IntelliHire today</p>
+                </div>
+                <SignupForm onSwitch={switchMode} isMobile />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Tablet / Desktop layout — split panel card ── */
   return (
     <div style={{
       minHeight: '100vh',
@@ -512,6 +632,7 @@ export const AuthPage: React.FC = () => {
         }
       `}</style>
 
+      {/* Background blobs */}
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
         <div style={{ position: 'absolute', top: '-8%', left: '8%', width: 620, height: 480, borderRadius: '60% 40% 55% 45% / 50% 60% 40% 50%', background: 'radial-gradient(ellipse, rgba(37,99,235,0.14) 0%, rgba(99,102,241,0.06) 50%, transparent 70%)', filter: 'blur(50px)', animation: 'drift1 16s ease-in-out infinite' }} />
         <div style={{ position: 'absolute', bottom: '-4%', right: '2%', width: 560, height: 440, borderRadius: '45% 55% 40% 60% / 55% 45% 65% 35%', background: 'radial-gradient(ellipse, rgba(14,165,233,0.12) 0%, rgba(56,189,248,0.05) 45%, transparent 70%)', filter: 'blur(55px)', animation: 'drift2 20s ease-in-out infinite' }} />
@@ -522,35 +643,54 @@ export const AuthPage: React.FC = () => {
         initial={{ opacity: 0, y: 28, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        style={{ width: '100%', maxWidth: 880, height: 'min(660px, calc(100vh - 40px))', borderRadius: 22, boxShadow: C.shadowLg + ', 0 0 0 1px rgba(30,58,138,0.07)', overflow: 'hidden', position: 'relative', background: C.surface }}
+        style={{
+          width: '100%',
+          maxWidth: cardMaxW,
+          height: cardHeight,
+          borderRadius: cardRadius,
+          boxShadow: C.shadowLg + ', 0 0 0 1px rgba(30,58,138,0.07)',
+          overflow: 'hidden',
+          position: 'relative',
+          background: C.surface,
+        }}
       >
         {/* LEFT: Sign Up */}
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', background: C.surface, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '32px 38px 40px', zIndex: 0, overflowY: 'auto' }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, width: '50%', height: '100%',
+          background: C.surface, display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', padding: `${formPadV}px ${formPadH}px`,
+          zIndex: 0, overflowY: 'auto',
+        }}>
           <motion.div
             animate={{ opacity: isLogin ? 0 : 1, scale: isLogin ? 0.97 : 1, filter: isLogin ? 'blur(2px)' : 'blur(0px)' }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
             style={{ pointerEvents: isLogin ? 'none' : 'auto' }}
           >
             <div style={{ marginBottom: 24 }}>
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Create Account</h2>
+              <h2 style={{ fontSize: isTablet ? 20 : 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Create Account</h2>
               <p style={{ fontSize: 13.5, color: C.textMuted }}>Join IntelliHire today</p>
             </div>
-            <SignupForm onSwitch={switchMode} />
+            <SignupForm onSwitch={switchMode} isMobile={false} />
           </motion.div>
         </div>
 
         {/* RIGHT: Sign In */}
-        <div style={{ position: 'absolute', top: 0, left: '50%', width: '50%', height: '100%', background: C.surface, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '36px 38px 44px', zIndex: 0, overflowY: 'auto' }}>
+        <div style={{
+          position: 'absolute', top: 0, left: '50%', width: '50%', height: '100%',
+          background: C.surface, display: 'flex', flexDirection: 'column',
+          justifyContent: 'center', padding: `${formPadV}px ${formPadH}px`,
+          zIndex: 0, overflowY: 'auto',
+        }}>
           <motion.div
             animate={{ opacity: isLogin ? 1 : 0, scale: isLogin ? 1 : 0.97, filter: isLogin ? 'blur(0px)' : 'blur(2px)' }}
             transition={{ duration: 0.3, ease: 'easeInOut' }}
             style={{ pointerEvents: isLogin ? 'auto' : 'none' }}
           >
             <div style={{ marginBottom: 24 }}>
-              <h2 style={{ fontSize: 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Welcome back</h2>
+              <h2 style={{ fontSize: isTablet ? 20 : 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Welcome back</h2>
               <p style={{ fontSize: 13.5, color: C.textMuted }}>Sign in to your account</p>
             </div>
-            <LoginForm onSwitch={switchMode} />
+            <LoginForm onSwitch={switchMode} isMobile={false} />
           </motion.div>
         </div>
 
@@ -559,7 +699,11 @@ export const AuthPage: React.FC = () => {
           initial={{ x: '0%' }}
           animate={{ x: isLogin ? '0%' : '100%' }}
           transition={{ type: 'spring', stiffness: 240, damping: 28, mass: 0.9 }}
-          style={{ position: 'absolute', top: 0, left: 0, width: '50%', height: '100%', background: C.gradPanel, display: 'flex', flexDirection: 'column', padding: '40px 36px', zIndex: 2, overflow: 'hidden' }}
+          style={{
+            position: 'absolute', top: 0, left: 0, width: '50%', height: '100%',
+            background: C.gradPanel, display: 'flex', flexDirection: 'column',
+            padding: panelPad, zIndex: 2, overflow: 'hidden',
+          }}
         >
           <PanelContent isLogin={panelIsLogin} />
         </motion.div>
@@ -568,7 +712,13 @@ export const AuthPage: React.FC = () => {
         <motion.div
           animate={{ left: isLogin ? '50%' : '0%' }}
           transition={{ type: 'spring', stiffness: 240, damping: 28, mass: 0.9 }}
-          style={{ position: 'absolute', bottom: 0, width: '50%', padding: '11px 38px', borderTop: `1px solid ${C.border}`, textAlign: 'center', fontSize: 11, color: C.textFaint, background: C.surface, zIndex: 1 }}
+          style={{
+            position: 'absolute', bottom: 0, width: '50%',
+            padding: `11px ${formPadH}px`,
+            borderTop: `1px solid ${C.border}`,
+            textAlign: 'center', fontSize: 11, color: C.textFaint,
+            background: C.surface, zIndex: 1,
+          }}
         >
           By {isLogin ? 'signing in' : 'signing up'}, you agree to our{' '}
           <motion.a href="#" whileHover={{ color: C.navy }} style={{ color: C.blue, textDecoration: 'none', transition: 'color 0.15s' }}>Terms</motion.a>
