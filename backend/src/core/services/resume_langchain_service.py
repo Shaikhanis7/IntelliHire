@@ -4,17 +4,14 @@ src/core/services/resume_langchain_service.py
 LangChain-powered resume section extraction + embedding generation.
 Uses Groq as the LLM backend (ultra-fast inference via groq API).
 
-Dependencies:
-    pip install langchain langchain-groq langchain-core sentence-transformers
-                python-multipart aiofiles PyPDF2 python-docx
-
-Changes:
-  - ExperienceEntry: added `years: int = 0` — LLM must return total years
-    per role; 0 if unknown.
-  - ParsedResumeSchema: unchanged structure, but experience entries now carry years.
-  - _SYSTEM_PROMPT: updated rules to instruct LLM to populate experience.years.
-  - ResumeSectionEmbedder: added `total_experience_years(parsed)` static helper
-    that sums LLM-returned years across all experience entries.
+Changes (full-time experience update):
+  - ExperienceEntry: added `is_fulltime: bool = True` — LLM classifies each
+    role as full-time or not (intern, freelance, contract, part-time, etc.).
+  - _SYSTEM_PROMPT: instructs LLM to populate is_fulltime and years ONLY for
+    full-time roles (internships/part-time/freelance → years=0, is_fulltime=False).
+  - ResumeSectionEmbedder.total_experience_years(): sums ONLY full-time entries.
+  - section_texts(): experience section text prioritises full-time roles,
+    placing them first so embeddings give them higher weight.
 """
 
 from __future__ import annotations
@@ -32,7 +29,7 @@ from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
 from src.observability.logging.logger import setup_logger
 
-log=setup_logger()
+log = setup_logger()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -64,8 +61,13 @@ class ExperienceEntry(BaseModel):
 
     # Total years spent in THIS role, as a strict non-negative integer.
     # Derive from duration string (e.g. "Jan 2019 – Mar 2023" → 4).
-    # Return 0 if the duration cannot be determined.
+    # Return 0 if the duration cannot be determined OR if is_fulltime=False.
     years: int = 0
+
+    # True  → full-time permanent/contract employment
+    # False → internship, part-time, freelance, volunteer, apprenticeship,
+    #         co-op, or any role explicitly marked as non-full-time
+    is_fulltime: bool = True
 
 
 class ProjectEntry(BaseModel):
@@ -76,15 +78,15 @@ class ProjectEntry(BaseModel):
 
 
 class ParsedResumeSchema(BaseModel):
-    contact:        ContactInfo     = Field(default_factory=ContactInfo)
-    summary:        str             = ""
-    skills:         list[str]       = Field(default_factory=list)
+    contact:        ContactInfo            = Field(default_factory=ContactInfo)
+    summary:        str                    = ""
+    skills:         list[str]              = Field(default_factory=list)
     education:      list[EducationEntry]   = Field(default_factory=list)
     experience:     list[ExperienceEntry]  = Field(default_factory=list)
-    certifications: list[str]       = Field(default_factory=list)
+    certifications: list[str]              = Field(default_factory=list)
     projects:       list[ProjectEntry]     = Field(default_factory=list)
-    languages:      list[str]       = Field(default_factory=list)
-    awards:         list[str]       = Field(default_factory=list)
+    languages:      list[str]              = Field(default_factory=list)
+    awards:         list[str]              = Field(default_factory=list)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -100,12 +102,25 @@ no commentary — raw JSON only):
 
 Rules:
 - skills: flat list of individual skill strings, no duplicates, lowercase
+
+- experience.is_fulltime:
+    Set to true ONLY for full-time permanent or full-time contract roles.
+    Set to false for: internships, part-time jobs, freelance, volunteer work,
+    apprenticeships, co-ops, or any role with explicit non-full-time indicators
+    (words like "intern", "internship", "part-time", "freelance", "contract
+    (part-time)", "volunteer", "trainee").
+    When in doubt, default to true.
+
+- experience.years:
+    Integer total years for FULL-TIME roles only.
+    Compute from the duration field (e.g. "Jan 2019 – Mar 2023" → 4,
+    "2020 – Present" → years from 2020 to current year).
+    Return 0 if: (a) the duration cannot be reliably determined, OR
+    (b) is_fulltime is false (internships, part-time, etc. do NOT count).
+    Do NOT sum across roles — each entry holds its own role duration.
+
 - experience.bullets: key achievements / responsibilities only, max 5 per role
-- experience.years: integer total years for that specific role only.
-  Compute from the duration field (e.g. "Jan 2019 – Mar 2023" → 4,
-  "2020 – Present" → years from 2020 to current year).
-  Return 0 if the duration cannot be reliably determined.
-  Do NOT sum across roles here — each entry holds its own role duration.
+
 - certifications: full certificate name as a string per item
 - If a field has no data, return its zero-value (empty string or empty list)
 """
@@ -125,21 +140,13 @@ class LangChainResumeParser:
     """
     Uses Groq via LangChain to extract structured resume sections.
     Groq provides near-instant inference — ideal for resume pipelines.
-
-    Supported models (pick by speed/quality tradeoff):
-      - "llama-3.3-70b-versatile"   ← best quality  (default)
-      - "llama-3.1-8b-instant"      ← fastest / lowest cost
-      - "mixtral-8x7b-32768"        ← long-context (32k) for large CVs
-      - "gemma2-9b-it"              ← lightweight alternative
-
-    Set GROQ_API_KEY in your environment (reads automatically).
     """
 
     DEFAULT_MODEL = "llama-3.3-70b-versatile"
 
     def __init__(
         self,
-        groq_api_key: str,  # type: ignore
+        groq_api_key: str,
         model_name: str = DEFAULT_MODEL,
         temperature: float = 0.0,
     ):
@@ -151,17 +158,12 @@ class LangChainResumeParser:
         self._parser = JsonOutputParser(pydantic_object=ParsedResumeSchema)
         self._chain  = self._build_chain()
 
-    # ── chain ─────────────────────────────────────────────────────────────────
-
     def _build_chain(self):
         prompt = ChatPromptTemplate.from_messages([
             ("system", _SYSTEM_PROMPT),
             ("human",  _HUMAN_PROMPT),
         ]).partial(format_instructions=self._parser.get_format_instructions())
-
         return prompt | self._llm | self._parser
-
-    # ── public ────────────────────────────────────────────────────────────────
 
     async def parse_async(self, resume_text: str) -> ParsedResumeSchema:
         """Async parse — use inside FastAPI route handlers."""
@@ -189,22 +191,8 @@ class LangChainResumeParser:
 class ResumeSectionEmbedder:
     """
     Generates embeddings via Google's gemini-embedding-001 model.
-
-    Why Google embedding instead of sentence-transformers:
-      - No local model download (~400 MB saved)
-      - No GPU / CPU memory overhead in your server process
-      - gemini-embedding-001 outperforms all-mpnet-base-v2 on MTEB benchmarks
-      - Same 768-dim output → zero DB schema changes
-      - task_type="RETRIEVAL_DOCUMENT" optimises vectors for semantic search
-
-    Requires:
-      pip install langchain-google-genai
-      export GOOGLE_API_KEY=AIza...
-
-    Supported task types (pass at construction):
-      RETRIEVAL_DOCUMENT  — for resume / document storage  (default)
-      RETRIEVAL_QUERY     — for search query embedding
-      SEMANTIC_SIMILARITY — for direct cosine comparison
+    Full-time experience entries are placed first in the experience section
+    text so the resulting embedding gives them naturally higher weight.
     """
 
     MODEL_NAME = "gemini-embedding-001"
@@ -212,7 +200,7 @@ class ResumeSectionEmbedder:
 
     def __init__(
         self,
-        google_api_key: str = settings.GOOGLE_API_KEY,  # type: ignore
+        google_api_key: str = settings.GOOGLE_API_KEY,
         task_type: str = "RETRIEVAL_DOCUMENT",
     ):
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -221,7 +209,6 @@ class ResumeSectionEmbedder:
             task_type=task_type,
             google_api_key=google_api_key,
         )
-        # Separate instance for query-time embedding (different task_type)
         self._query_embeddings = GoogleGenerativeAIEmbeddings(
             model=self.MODEL_NAME,
             task_type="RETRIEVAL_QUERY",
@@ -229,42 +216,72 @@ class ResumeSectionEmbedder:
         )
         log.info("ResumeSectionEmbedder: Google gemini-embedding-001 ready ✓")
 
-    # ── experience years helper ───────────────────────────────────────────────
+    # ── experience years (full-time only) ─────────────────────────────────────
 
     @staticmethod
     def total_experience_years(parsed: ParsedResumeSchema) -> int | None:
         """
-        Sum the LLM-extracted years across all experience entries.
+        Sums LLM-extracted years across FULL-TIME experience entries only.
+        Internships, part-time, freelance, etc. (is_fulltime=False) are excluded.
 
         Returns:
-          int  — total years when at least one entry has years > 0
-          None — every entry returned 0 (LLM couldn't determine any durations);
+          int  — total full-time years when at least one entry has years > 0
+          None — no reliable full-time duration data from LLM;
                  callers should fall back to regex on parsed_text.
-
-        Note: each ExperienceEntry.years is the duration of THAT role only
-        (not cumulative). We sum here to get the total career span from
-        distinct roles. Overlap between concurrent roles is not handled —
-        for typical linear careers the sum is accurate enough.
         """
-        llm_years = [e.years for e in parsed.experience if e.years > 0]
-        if not llm_years:
-            return None   # signal to caller: no reliable data from LLM
-        return sum(llm_years)
+        fulltime_years = [
+            e.years
+            for e in parsed.experience
+            if e.is_fulltime and e.years > 0
+        ]
+        if not fulltime_years:
+            return None
+        return sum(fulltime_years)
+
+    @staticmethod
+    def fulltime_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
+        """Returns only the full-time experience entries, sorted newest-first."""
+        return [e for e in parsed.experience if e.is_fulltime]
+
+    @staticmethod
+    def non_fulltime_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
+        """Returns internships, part-time, freelance etc."""
+        return [e for e in parsed.experience if not e.is_fulltime]
 
     # ── section text helpers ──────────────────────────────────────────────────
 
     @staticmethod
     def section_texts(parsed: ParsedResumeSchema) -> dict[str, str]:
+        """
+        Builds plain-text representations of each resume section for embedding.
+
+        Experience section ordering:
+          1. Full-time roles first (higher embedding weight)
+          2. Non-full-time roles appended after (still present, lower weight)
+        """
+        fulltime     = ResumeSectionEmbedder.fulltime_entries(parsed)
+        non_fulltime = ResumeSectionEmbedder.non_fulltime_entries(parsed)
+
+        # Full-time entries get their bullets included; non-full-time get title+company only
+        fulltime_text = " ".join(
+            f"{e.title} {e.company} {' '.join(e.bullets)}"
+            for e in fulltime
+        )
+        non_fulltime_text = " ".join(
+            f"{e.title} {e.company}"
+            for e in non_fulltime
+        )
+        experience_text = " ".join(
+            filter(None, [fulltime_text, non_fulltime_text])
+        )
+
         return {
             "summary": parsed.summary,
             "skills":  " ".join(parsed.skills),
             "education": " ".join(
                 f"{e.degree} {e.institution} {e.year}" for e in parsed.education
             ),
-            "experience": " ".join(
-                f"{e.title} {e.company} {' '.join(e.bullets)}"
-                for e in parsed.experience
-            ),
+            "experience": experience_text,
             "certifications": " ".join(parsed.certifications),
             "projects": " ".join(
                 f"{p.title} {p.description} {' '.join(p.tech)}"
@@ -275,12 +292,6 @@ class ResumeSectionEmbedder:
     # ── single text embedding ─────────────────────────────────────────────────
 
     def embed(self, text: str, is_query: bool = False) -> list[float]:
-        """
-        Embed a single string.
-        Set is_query=True when embedding a search query (uses RETRIEVAL_QUERY
-        task_type which gives better dot-product scores against RETRIEVAL_DOCUMENT
-        vectors stored in pgvector).
-        """
         if not text or not text.strip():
             return self._zeros()
         try:
@@ -291,7 +302,6 @@ class ResumeSectionEmbedder:
             return self._zeros()
 
     # ── batch embedding for all sections ─────────────────────────────────────
-    # Uses embed_documents() — single API call for all sections (more efficient)
 
     def embed_all_sections(
         self, parsed: ParsedResumeSchema
@@ -317,8 +327,6 @@ class ResumeSectionEmbedder:
             t for t in self.section_texts(parsed).values() if t.strip()
         )
         return self.embed(all_text)
-
-    # ── query embedding (used by CandidateSearchService) ─────────────────────
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a recruiter search query with RETRIEVAL_QUERY task type."""
