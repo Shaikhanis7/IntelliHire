@@ -1,53 +1,68 @@
 """
 src/core/tasks/sourcing_tasks.py
+
+Background worker replacement for Celery.
+The task function is async — Starlette's BackgroundTasks detects this and
+schedules it directly on the event loop instead of running it in a thread pool.
 """
-import asyncio
-from src.celery_app import celery_app
-from src.core.tasks.event_loop import run_async, get_worker_session_factory
 
-SOURCING_TIMEOUT = 840
+from __future__ import annotations
+
+from src.observability.logging.logger import setup_logger
+
+log = setup_logger()
 
 
-@celery_app.task(
-    bind=True,
-    max_retries=1,
-    default_retry_delay=60,
-)
-def source_candidates_task(
-    self,
+async def source_candidates_task(
     job_id: int,
     role: str,
-    skills: list,
+    skills: list[str],
     min_exp: int,
     count: int,
-    mode: str = "both",
-    sourcing_id: int | None = None,   # ← added
-):
-    async def _run():
-        SessionLocal = get_worker_session_factory()
-        async with SessionLocal() as db:
-            from src.core.services.sourcing_service import source_candidates
-            return await asyncio.wait_for(
-                source_candidates(
-                    db,
-                    job_id,
-                    role,
-                    skills,
-                    min_exp,
-                    count,
-                    mode,
-                    sourcing_id=sourcing_id,   # ← pass through
-                ),
-                timeout=SOURCING_TIMEOUT,
+    mode: str,
+    sourcing_id: int,
+) -> None:
+    """
+    Async background task — drop-in replacement for the Celery task.
+
+    Must be async so Starlette's BackgroundTasks runs it on the event loop
+    directly. If it were sync, Starlette would push it to a thread pool via
+    anyio, where asyncio.get_event_loop() raises a RuntimeError.
+
+    Usage (in router):
+        background_tasks.add_task(
+            source_candidates_task,
+            job_id, role, skills, min_exp, count, mode, sourcing.id,
+        )
+    """
+    try:
+        from src.data.clients.postgres_client import get_async_session
+        from src.core.services.sourcing_service import source_candidates
+
+        log.info(
+            f"[bg_task] Starting | sourcing_id={sourcing_id} job_id={job_id} "
+            f"role='{role}' mode={mode} count={count}"
+        )
+
+        async with get_async_session() as db:
+            result = await source_candidates(
+                db=db,
+                job_id=job_id,
+                role=role,
+                skills=skills,
+                min_exp=min_exp,
+                count=count,
+                mode=mode,
+                sourcing_id=sourcing_id,
             )
 
-    try:
-        return run_async(_run())
-    except asyncio.TimeoutError:
-        return {
-            "status": "partial",
-            "job_id": job_id,
-            "note":   f"Sourcing hit {SOURCING_TIMEOUT}s timeout — partial results may be in DB",
-        }
+        log.info(
+            f"[bg_task] Done | sourcing_id={sourcing_id} job_id={job_id} "
+            f"total_found={result.get('total_found', '?')}"
+        )
+
     except Exception as exc:
-        raise self.retry(exc=exc)
+        log.error(
+            f"[bg_task] FAILED | sourcing_id={sourcing_id} job_id={job_id} | {exc}",
+            exc_info=True,
+        )

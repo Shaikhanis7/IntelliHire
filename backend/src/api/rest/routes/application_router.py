@@ -2,7 +2,7 @@
 src/api/routes/application_router.py
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.services.application_service import (
@@ -24,6 +24,7 @@ app_router = APIRouter(prefix="/applications", tags=["Applications"])
 @app_router.post("/apply/{job_id}")
 async def apply(
     job_id: int,
+    background_tasks: BackgroundTasks, 
     file: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
@@ -34,7 +35,8 @@ async def apply(
     if not candidate:
         raise HTTPException(404, "Candidate profile not found.")
     return await apply_for_job_with_resume(
-        db, candidate_id=candidate.id, job_id=job_id, file=file
+        db, candidate_id=candidate.id, job_id=job_id, file=file,
+        background_tasks=background_tasks
     )
 
 
