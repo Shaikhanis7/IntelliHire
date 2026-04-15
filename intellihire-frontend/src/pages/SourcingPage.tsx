@@ -773,7 +773,6 @@ const SourcingPage: React.FC = () => {
 
   const handleTrigger = () => {
     if (!selectedJob) return;
-    history.setNeverSourced?.(false);
     trigger.trigger({ job_id: selectedJob.id, count, mode });
   };
 
