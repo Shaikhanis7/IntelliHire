@@ -1,6 +1,5 @@
 // pages/LandingPage.tsx
 // Aesthetic: Light Luxury — warm ivory · deep slate · gold · Fraunces + DM Sans
-// All sections extracted to feature components, hooks, tokens
 
 import React from 'react';
 import { useLanding } from '../hooks/useLanding';
@@ -10,6 +9,7 @@ import { Navbar } from '../components/common/Navbar';
 import { HeroSection } from '../components/common/HeroSection';
 import { FeaturesSection, HowSection, Marquee } from '../components/common/FeaturesSection';
 import { CTASection, Footer, TestimonialsSection } from '../components/common/TestimonialsSection';
+import { ArchitectureSection } from '../components/common/ArchitectureSection';
 
 const LandingPage: React.FC = () => {
   const { isAuthenticated, goAuth, goDashboard } = useLanding();
@@ -28,10 +28,8 @@ const LandingPage: React.FC = () => {
         @media (max-width: 680px) { .nav-links-landing { display: none !important; } }
       `}</style>
 
-      {/* Paper grain texture */}
       <Grain />
 
-      {/* Sections */}
       <Navbar
         isAuthenticated={isAuthenticated}
         onLogin={goAuth}
@@ -50,6 +48,10 @@ const LandingPage: React.FC = () => {
       <FeaturesSection />
 
       <HowSection />
+
+      {/* Architecture diagram — placed between How It Works and Testimonials
+          so prospects understand the tech depth before social proof */}
+      <ArchitectureSection />
 
       <TestimonialsSection />
 
