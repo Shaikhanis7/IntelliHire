@@ -1,5 +1,5 @@
-// pages/MyApplicationsPage.tsx — CANDIDATE ONLY
-// Theme: Light blue professional — matches ApplicationsPage (DM Sans + Fraunces · frosted glass · orbs · dot-grid)
+// pages/MyApplicationsPage.tsx — CANDIDATE ONLY · FULLY RESPONSIVE
+// Theme: Light blue professional (DM Sans + Fraunces · frosted glass · orbs · dot-grid)
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -18,9 +18,7 @@ import {
   useCandidateFilter,
 } from '../features/application/hooks/useCandidateApplications';
 
-/* ═══════════════════════════════════════════════════════════════
-   DESIGN TOKENS — identical to ApplicationsPage
-   ═══════════════════════════════════════════════════════════════ */
+/* ─── Design tokens ── */
 const C = {
   bg:           '#f0f5ff',
   surface:      '#f5f8ff',
@@ -56,9 +54,7 @@ const C = {
   shadowTeal:   '0 4px 16px rgba(6,214,176,0.25)',
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   STATUS META
-   ═══════════════════════════════════════════════════════════════ */
+/* ─── Status meta ── */
 interface StatusMeta {
   label: string; color: string; bg: string; border: string;
   icon: React.ReactNode; step: number; description: string;
@@ -75,11 +71,7 @@ const STATUS: Record<AppStatus, StatusMeta> = {
 
 const PIPELINE_STEPS = ['Applied', 'In Review', 'Shortlisted', 'Hired'];
 
-/* ═══════════════════════════════════════════════════════════════
-   SUB-COMPONENTS
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── Animated background ─────────────────────────────────────── */
+/* ─── Background ── */
 const BgPattern: React.FC = () => (
   <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
     <div style={{ position:'absolute', top:'-10%', right:'-5%', width:680, height:560, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(79,125,255,0.13) 0%,rgba(79,125,255,0.04) 50%,transparent 75%)', filter:'blur(64px)', animation:'orbFloat1 18s ease-in-out infinite' }} />
@@ -97,14 +89,14 @@ const BgPattern: React.FC = () => (
   </div>
 );
 
-/* ── Frosted card ────────────────────────────────────────────── */
+/* ─── Card ── */
 const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties }> = ({ children, style }) => (
   <div style={{ background:'rgba(255,255,255,0.82)', backdropFilter:'blur(20px) saturate(1.5)', border:`1px solid ${C.border}`, borderRadius:18, boxShadow:C.shadow, ...style }}>
     {children}
   </div>
 );
 
-/* ── Stat card ───────────────────────────────────────────────── */
+/* ─── Stat card ── */
 const StatCard: React.FC<{ label: string; value: number | string; icon: React.ReactNode; color: string; delay?: number }> = ({ label, value, icon, color, delay = 0 }) => {
   const [hov, setHov] = useState(false);
   return (
@@ -112,40 +104,40 @@ const StatCard: React.FC<{ label: string; value: number | string; icon: React.Re
       initial={{ opacity:0, y:12 }} animate={{ opacity:1, y:0 }}
       transition={{ delay, duration:0.4, ease:[0.22,1,0.36,1] }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: hov ? C.white : 'rgba(255,255,255,0.80)', backdropFilter:'blur(16px)', border:`1px solid ${hov ? `${color}35` : C.border}`, borderRadius:16, padding:'16px 18px', boxShadow: hov ? `0 8px 32px ${color}18` : C.shadow, transition:'all 0.25s cubic-bezier(0.22,1,0.36,1)', transform: hov ? 'translateY(-3px)' : 'none', cursor:'default' }}
+      style={{ background: hov ? C.white : 'rgba(255,255,255,0.80)', backdropFilter:'blur(16px)', border:`1px solid ${hov ? `${color}35` : C.border}`, borderRadius:16, padding:'14px 16px', boxShadow: hov ? `0 8px 32px ${color}18` : C.shadow, transition:'all 0.25s cubic-bezier(0.22,1,0.36,1)', transform: hov ? 'translateY(-3px)' : 'none', cursor:'default' }}
     >
-      <div style={{ width:36, height:36, borderRadius:10, marginBottom:12, background:`${color}12`, border:`1px solid ${color}22`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition:'box-shadow 0.25s' }}>
+      <div style={{ width:34, height:34, borderRadius:10, marginBottom:10, background:`${color}12`, border:`1px solid ${color}22`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition:'box-shadow 0.25s' }}>
         <span style={{ color, display:'flex' }}>{icon}</span>
       </div>
-      <div style={{ fontSize:26, fontWeight:800, color:C.text, letterSpacing:'-1px', lineHeight:1, fontFamily:"'Fraunces', Georgia, serif" }}>{value}</div>
+      <div style={{ fontSize:'clamp(20px,4vw,26px)', fontWeight:800, color:C.text, letterSpacing:'-1px', lineHeight:1, fontFamily:"'Fraunces', Georgia, serif" }}>{value}</div>
       <div style={{ fontSize:11, color:C.textMuted, marginTop:4, fontWeight:500 }}>{label}</div>
     </motion.div>
   );
 };
 
-/* ── Status badge ────────────────────────────────────────────── */
+/* ─── Status badge ── */
 const StatusBadge: React.FC<{ status: AppStatus }> = ({ status }) => {
   const m = STATUS[status] ?? STATUS.applied;
   return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:99, background:m.bg, color:m.color, border:`1px solid ${m.border}`, fontSize:10.5, fontWeight:700, letterSpacing:0.2 }}>
+    <span style={{ display:'inline-flex', alignItems:'center', gap:5, padding:'3px 9px', borderRadius:99, background:m.bg, color:m.color, border:`1px solid ${m.border}`, fontSize:10.5, fontWeight:700, letterSpacing:0.2, whiteSpace:'nowrap' }}>
       <span style={{ width:5, height:5, borderRadius:'50%', background:m.color, flexShrink:0 }} />
       {m.label}
     </span>
   );
 };
 
-/* ── Skill pill ──────────────────────────────────────────────── */
+/* ─── Skill pill ── */
 const Pill: React.FC<{ children: string }> = ({ children }) => (
   <span style={{ padding:'2px 8px', borderRadius:99, fontSize:10, fontWeight:600, background:C.blueDim, color:C.blue, border:`1px solid ${C.blue}20` }}>
     {children}
   </span>
 );
 
-/* ── Pipeline progress bar ───────────────────────────────────── */
+/* ─── Pipeline bar ── */
 const PipelineBar: React.FC<{ status: AppStatus }> = ({ status }) => {
   const step = status === 'rejected' ? -1 : STATUS[status].step;
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:0, marginTop:14 }}>
+    <div className="myapp-pipeline" style={{ display:'flex', alignItems:'center', gap:0, marginTop:14 }}>
       {PIPELINE_STEPS.map((label, i) => {
         const isActive  = step >= i;
         const isCurrent = step === i;
@@ -160,7 +152,7 @@ const PipelineBar: React.FC<{ status: AppStatus }> = ({ status }) => {
               <motion.div
                 initial={{ scale:0.6, opacity:0 }} animate={{ scale:1, opacity:1 }}
                 transition={{ delay: i * 0.07, duration:0.3 }}
-                style={{ width:20, height:20, borderRadius:'50%', background: isRejected ? (i===0 ? C.dangerDim : C.surfaceDeep) : isActive ? C.blueDim : C.surfaceDeep, border:`2px solid ${dotColor}`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow: isCurrent && !isRejected ? `0 0 0 3px ${C.blue}20` : 'none' }}
+                style={{ width:20, height:20, borderRadius:'50%', background: isRejected ? (i===0 ? C.dangerDim : C.surfaceDeep) : isActive ? C.blueDim : C.surfaceDeep, border:`2px solid ${dotColor}`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow: isCurrent && !isRejected ? `0 0 0 3px ${C.blue}20` : 'none', flexShrink:0 }}
               >
                 {isRejected && i===0
                   ? <XCircle size={9} color={C.danger}/>
@@ -169,7 +161,7 @@ const PipelineBar: React.FC<{ status: AppStatus }> = ({ status }) => {
                     : <span style={{ width:4, height:4, borderRadius:'50%', background:C.textFaint, display:'block' }} />
                 }
               </motion.div>
-              <span style={{ fontSize:9, fontWeight: isCurrent ? 700 : 500, color: isRejected ? (i===0 ? C.danger : C.textFaint) : isActive ? C.blue : C.textFaint, whiteSpace:'nowrap' }}>
+              <span className="myapp-pipeline-label" style={{ fontSize:9, fontWeight: isCurrent ? 700 : 500, color: isRejected ? (i===0 ? C.danger : C.textFaint) : isActive ? C.blue : C.textFaint, whiteSpace:'nowrap' }}>
                 {isRejected && i===0 ? 'Rejected' : label}
               </span>
             </div>
@@ -177,7 +169,7 @@ const PipelineBar: React.FC<{ status: AppStatus }> = ({ status }) => {
               <motion.div
                 initial={{ scaleX:0 }} animate={{ scaleX:1 }}
                 transition={{ delay: i*0.1 + 0.15, duration:0.35 }}
-                style={{ height:2, flex:1, marginBottom:14, background: isRejected ? C.surfaceDeep : step > i ? C.blue : C.surfaceDeep, minWidth:16, transformOrigin:'left', borderRadius:99 }}
+                style={{ height:2, flex:1, marginBottom:14, background: isRejected ? C.surfaceDeep : step > i ? C.blue : C.surfaceDeep, minWidth:10, transformOrigin:'left', borderRadius:99 }}
               />
             )}
           </React.Fragment>
@@ -187,7 +179,7 @@ const PipelineBar: React.FC<{ status: AppStatus }> = ({ status }) => {
   );
 };
 
-/* ── Application card ────────────────────────────────────────── */
+/* ─── Application card ── */
 const ApplicationCard: React.FC<{ app: Application; index: number; onView: (id: number) => void }> = ({ app, index, onView }) => {
   const status      = (app.status ?? 'applied') as AppStatus;
   const meta        = STATUS[status];
@@ -211,13 +203,12 @@ const ApplicationCard: React.FC<{ app: Application; index: number; onView: (id: 
       whileHover={{ y:-3, boxShadow: isHired ? `0 8px 36px ${C.indigo}22` : isShortlist ? `0 8px 32px ${C.teal}18` : C.shadowHov }}
       style={{ background:'rgba(255,255,255,0.84)', backdropFilter:'blur(18px)', border:`1.5px solid ${isHired ? `${C.indigo}35` : isShortlist ? C.tealBorder : C.border}`, borderRadius:18, overflow:'hidden', boxShadow:C.shadow, transition:'border-color 0.2s', position:'relative' }}
     >
-      {/* Top accent stripe */}
       {(isHired || isShortlist) && (
         <div style={{ height:3, background: isHired ? `linear-gradient(90deg,${C.indigo},${C.blueLight})` : `linear-gradient(90deg,${C.blue},${C.teal})` }} />
       )}
 
-      <div style={{ padding:'20px 22px' }}>
-        <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+      <div style={{ padding:'18px 20px' }}>
+        <div className="myapp-card-inner">
 
           {/* Icon */}
           <div style={{ width:44, height:44, borderRadius:12, flexShrink:0, background: isHired ? C.indigoDim : isShortlist ? C.tealDim : C.blueDim, border:`1px solid ${isHired ? `${C.indigo}28` : isShortlist ? C.tealBorder : C.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
@@ -227,29 +218,25 @@ const ApplicationCard: React.FC<{ app: Application; index: number; onView: (id: 
           {/* Info */}
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:10, marginBottom:6, flexWrap:'wrap' }}>
-              <div>
-                <h3 style={{ fontSize:15, fontWeight:700, color:C.text, margin:0, letterSpacing:'-0.2px', fontFamily:"'Fraunces', Georgia, serif" }}>{jobTitle}</h3>
-                <div style={{ display:'flex', gap:12, marginTop:4, flexWrap:'wrap' }}>
+              <div style={{ minWidth:0 }}>
+                <h3 style={{ fontSize:'clamp(13px,3vw,15px)', fontWeight:700, color:C.text, margin:0, letterSpacing:'-0.2px', fontFamily:"'Fraunces', Georgia, serif", wordBreak:'break-word' }}>{jobTitle}</h3>
+                <div style={{ display:'flex', gap:10, marginTop:4, flexWrap:'wrap' }}>
                   {jobLocation && (
                     <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11.5, color:C.textMuted, fontWeight:500 }}>
-                      <MapPin size={10} style={{ color:C.textFaint }}/> {jobLocation}
+                      <MapPin size={10} style={{ color:C.textFaint, flexShrink:0 }}/> {jobLocation}
                     </span>
                   )}
                   <span style={{ display:'flex', alignItems:'center', gap:4, fontSize:11.5, color:C.textMuted, fontWeight:500 }}>
-                    <Clock size={10} style={{ color:C.textFaint }}/> Applied {formatDate(app.created_at)}
+                    <Clock size={10} style={{ color:C.textFaint, flexShrink:0 }}/> Applied {formatDate(app.created_at)}
                   </span>
                   <span style={{ fontSize:11.5, color:C.textFaint, fontWeight:500 }}>Job #{app.job_id}</span>
                 </div>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-                <StatusBadge status={status} />
-              </div>
+              <StatusBadge status={status} />
             </div>
 
-            {/* Description */}
             <p style={{ fontSize:12.5, color:C.textMuted, margin:'0 0 10px', lineHeight:1.6, fontStyle:'italic' }}>{meta.description}</p>
 
-            {/* Skills */}
             {skills.length > 0 && (
               <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:10 }}>
                 {skills.slice(0, 5).map(s => <Pill key={s}>{s}</Pill>)}
@@ -257,20 +244,17 @@ const ApplicationCard: React.FC<{ app: Application; index: number; onView: (id: 
               </div>
             )}
 
-            {/* Fit summary — safe for candidate */}
             {app.fit_summary && (
-              <div style={{ padding:'8px 12px', borderRadius:9, background:C.surfaceDeep, border:`1px solid ${C.border}`, fontSize:12, color:C.textMuted, lineHeight:1.6, marginBottom:10 }}>
+              <div style={{ padding:'8px 12px', borderRadius:9, background:C.surfaceDeep, border:`1px solid ${C.border}`, fontSize:12, color:C.textMuted, lineHeight:1.6, marginBottom:10, wordBreak:'break-word' }}>
                 <span style={{ fontWeight:700, color:C.blue, marginRight:5 }}>Match insight:</span>
                 {app.fit_summary}
               </div>
             )}
 
-            {/* Pipeline bar */}
             <PipelineBar status={status} />
           </div>
         </div>
 
-        {/* Footer */}
         <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, paddingTop:12, borderTop:`1px solid ${C.border}` }}>
           <motion.button
             onClick={() => onView(app.job_id)}
@@ -288,7 +272,7 @@ const ApplicationCard: React.FC<{ app: Application; index: number; onView: (id: 
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN PAGE
-   ═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const MyApplicationsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchFocused, setSearchFocused] = useState(false);
@@ -297,15 +281,15 @@ const MyApplicationsPage: React.FC = () => {
   const filter = useCandidateFilter(apps);
 
   const filterOptions = [
-    { key: 'all'         as const, label: 'All',          count: filter.stats.total,       color: C.blue   },
-    { key: 'applied'     as const, label: 'Applied',      count: filter.stats.applied,     color: C.textMuted },
-    { key: 'shortlisted' as const, label: 'Shortlisted',  count: filter.stats.shortlisted, color: C.teal   },
-    { key: 'hired'       as const, label: 'Hired',        count: filter.stats.hired,       color: C.indigo },
-    { key: 'rejected'    as const, label: 'Not selected', count: filter.stats.rejected,    color: C.danger },
+    { key: 'all'         as const, label: 'All',         count: filter.stats.total,       color: C.blue   },
+    { key: 'applied'     as const, label: 'Applied',     count: filter.stats.applied,     color: C.textMuted },
+    { key: 'shortlisted' as const, label: 'Shortlisted', count: filter.stats.shortlisted, color: C.teal   },
+    { key: 'hired'       as const, label: 'Hired',       count: filter.stats.hired,       color: C.indigo },
+    { key: 'rejected'    as const, label: 'Not selected',count: filter.stats.rejected,    color: C.danger },
   ];
 
   return (
-    <div style={{ fontFamily:"'DM Sans', system-ui, sans-serif", minHeight:'100vh', background:C.bg, padding:24, position:'relative', overflow:'hidden' }}>
+    <div style={{ fontFamily:"'DM Sans', system-ui, sans-serif", minHeight:'100vh', background:C.bg, padding:'clamp(12px,3vw,24px)', position:'relative', overflow:'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&display=swap');
         @keyframes fadeUp    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
@@ -320,33 +304,119 @@ const MyApplicationsPage: React.FC = () => {
         input:focus { outline:none; }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-thumb { background:rgba(79,125,255,0.18); border-radius:99px; }
-        .myapp-stat-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
-        @media(max-width:900px)  { .myapp-stat-grid { grid-template-columns:repeat(3,1fr); } }
-        @media(max-width:560px)  { .myapp-stat-grid { grid-template-columns:repeat(2,1fr); } }
+
+        /* ── Stat grid ── */
+        .myapp-stat-grid {
+          display:grid;
+          grid-template-columns:repeat(5,1fr);
+          gap:10px;
+          margin-bottom:20px;
+          position:relative;
+          z-index:2;
+        }
+
+        /* ── Page header ── */
+        .myapp-header {
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          flex-wrap:wrap;
+          gap:16px;
+          margin-bottom:26px;
+          position:relative;
+          z-index:2;
+        }
+
+        .myapp-header-left {
+          display:flex;
+          align-items:center;
+          gap:14px;
+        }
+
+        .myapp-header-right {
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+        }
+
+        /* ── Filter bar ── */
+        .myapp-filter-bar {
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+
+        .myapp-search-wrap {
+          flex:1;
+          min-width:180px;
+          position:relative;
+        }
+
+        .myapp-filter-pills {
+          display:flex;
+          gap:5px;
+          flex-wrap:wrap;
+          align-items:center;
+        }
+
+        /* ── Card inner ── */
+        .myapp-card-inner {
+          display:flex;
+          gap:14px;
+          align-items:flex-start;
+        }
+
+        /* ── Pipeline ── */
+        .myapp-pipeline { overflow:hidden; }
+        .myapp-pipeline-label { display:block; }
+
+        /* ── Tablet ── */
+        @media(max-width:900px) {
+          .myapp-stat-grid { grid-template-columns:repeat(3,1fr); }
+        }
+
+        /* ── Mobile ── */
+        @media(max-width:600px) {
+          .myapp-stat-grid { grid-template-columns:repeat(3,1fr); gap:8px; }
+          .myapp-header { gap:12px; }
+          .myapp-header-right { width:100%; justify-content:flex-start; }
+          .myapp-filter-bar { flex-direction:column; align-items:stretch; }
+          .myapp-search-wrap { min-width:unset; }
+          .myapp-pipeline-label { display:none; }
+          .myapp-card-inner { gap:10px; }
+        }
+
+        /* ── Very small ── */
+        @media(max-width:400px) {
+          .myapp-stat-grid { grid-template-columns:repeat(2,1fr); }
+          .myapp-card-inner { flex-direction:column; }
+        }
       `}</style>
 
       <BgPattern />
 
-      {/* ── Header ── */}
+      {/* Header */}
       <motion.div
         initial={{ opacity:0, y:-12 }} animate={{ opacity:1, y:0 }}
         transition={{ duration:0.5, ease:[0.22,1,0.36,1] }}
-        style={{ marginBottom:26, position:'relative', zIndex:2, display:'flex', alignItems:'flex-start', justifyContent:'space-between', flexWrap:'wrap', gap:16 }}
+        className="myapp-header"
       >
-        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-          <div style={{ width:50, height:50, borderRadius:15, background:C.gradBlue, boxShadow:C.shadowBlue, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div className="myapp-header-left">
+          <div style={{ width:50, height:50, borderRadius:15, background:C.gradBlue, boxShadow:C.shadowBlue, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
             <Briefcase size={22} color={C.white} />
           </div>
           <div>
-            <h1 style={{ fontSize:24, fontWeight:800, color:C.text, letterSpacing:'-0.6px', margin:0, lineHeight:1.1, fontFamily:"'Fraunces', Georgia, serif" }}>My Applications</h1>
+            <h1 style={{ fontSize:'clamp(18px,4vw,24px)', fontWeight:800, color:C.text, letterSpacing:'-0.6px', margin:0, lineHeight:1.1, fontFamily:"'Fraunces', Georgia, serif" }}>My Applications</h1>
             <p style={{ fontSize:13, color:C.textMuted, fontWeight:500, margin:'3px 0 0' }}>
               {filter.stats.total} application{filter.stats.total !== 1 ? 's' : ''} · {filter.stats.active} in progress
             </p>
           </div>
         </div>
 
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', borderRadius:99, background:C.tealDim, border:`1px solid ${C.tealBorder}`, fontSize:12, fontWeight:700, color:C.teal }}>
+        <div className="myapp-header-right">
+          <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 14px', borderRadius:99, background:C.tealDim, border:`1px solid ${C.tealBorder}`, fontSize:12, fontWeight:700, color:C.teal, whiteSpace:'nowrap' }}>
             <span style={{ width:6, height:6, borderRadius:'50%', background:C.teal, animation:'pulseGlow 2s ease infinite', display:'inline-block' }} />
             Tracking Active
           </span>
@@ -354,7 +424,7 @@ const MyApplicationsPage: React.FC = () => {
             onClick={refresh} disabled={refreshing}
             whileHover={{ borderColor:C.borderFocus, color:C.blue }}
             whileTap={{ scale:0.97 }}
-            style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:10, border:`1px solid ${C.border}`, background:C.white, fontSize:12.5, fontWeight:600, color:C.textMuted, cursor: refreshing ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow:C.shadow, transition:'all 0.2s' }}
+            style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:10, border:`1px solid ${C.border}`, background:C.white, fontSize:12.5, fontWeight:600, color:C.textMuted, cursor: refreshing ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow:C.shadow, transition:'all 0.2s', whiteSpace:'nowrap' }}
           >
             <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
             {refreshing ? 'Refreshing…' : 'Refresh'}
@@ -362,25 +432,23 @@ const MyApplicationsPage: React.FC = () => {
         </div>
       </motion.div>
 
-      {/* ── Stats strip ── */}
+      {/* Stats strip */}
       <AnimatePresence>
         {!loading && apps.length > 0 && (
-          <div className="myapp-stat-grid" style={{ marginBottom:20, position:'relative', zIndex:2 }}>
-            <StatCard label="Total applied"  value={filter.stats.total}       color={C.blue}   icon={<Briefcase size={14}/>}  delay={0}    />
-            <StatCard label="In progress"    value={filter.stats.active}      color={C.blue}   icon={<TrendingUp size={14}/>} delay={0.05} />
-            <StatCard label="Shortlisted"    value={filter.stats.shortlisted} color={C.teal}   icon={<Star size={14}/>}       delay={0.10} />
-            <StatCard label="Hired"          value={filter.stats.hired}       color={C.indigo} icon={<UserCheck size={14}/>}  delay={0.15} />
-            <StatCard label="Not selected"   value={filter.stats.rejected}    color={C.danger} icon={<XCircle size={14}/>}    delay={0.20} />
+          <div className="myapp-stat-grid">
+            <StatCard label="Total"       value={filter.stats.total}       color={C.blue}   icon={<Briefcase size={14}/>}  delay={0}    />
+            <StatCard label="In progress" value={filter.stats.active}      color={C.blue}   icon={<TrendingUp size={14}/>} delay={0.05} />
+            <StatCard label="Shortlisted" value={filter.stats.shortlisted} color={C.teal}   icon={<Star size={14}/>}       delay={0.10} />
+            <StatCard label="Hired"       value={filter.stats.hired}       color={C.indigo} icon={<UserCheck size={14}/>}  delay={0.15} />
+            <StatCard label="Rejected"    value={filter.stats.rejected}    color={C.danger} icon={<XCircle size={14}/>}    delay={0.20} />
           </div>
         )}
       </AnimatePresence>
 
-      {/* ── Filter + Search bar ── */}
+      {/* Filter + Search bar */}
       <Card style={{ padding:'12px 14px', marginBottom:14, position:'relative', zIndex:2 }}>
-        <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
-
-          {/* Search */}
-          <div style={{ flex:1, minWidth:200, position:'relative' }}>
+        <div className="myapp-filter-bar">
+          <div className="myapp-search-wrap">
             <Search size={13} style={{ position:'absolute', left:11, top:'50%', transform:'translateY(-50%)', color: searchFocused ? C.blue : C.textFaint, transition:'color 0.2s', pointerEvents:'none' }} />
             <input
               value={filter.search}
@@ -403,8 +471,7 @@ const MyApplicationsPage: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          {/* Status filter pills */}
-          <div style={{ display:'flex', gap:5, flexWrap:'wrap', alignItems:'center' }}>
+          <div className="myapp-filter-pills">
             {filterOptions.map(f => {
               const active = filter.statusFilter === f.key;
               return (
@@ -412,7 +479,7 @@ const MyApplicationsPage: React.FC = () => {
                   key={f.key}
                   onClick={() => filter.setStatusFilter(f.key)}
                   whileTap={{ scale:0.96 }}
-                  style={{ padding:'5px 12px', borderRadius:8, border:`1px solid ${active ? `${f.color}50` : C.border}`, background: active ? `${f.color}12` : C.white, color: active ? f.color : C.textMuted, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', transition:'all .15s', boxShadow: active ? `0 0 10px ${f.color}18` : 'none' }}
+                  style={{ padding:'5px 11px', borderRadius:8, border:`1px solid ${active ? `${f.color}50` : C.border}`, background: active ? `${f.color}12` : C.white, color: active ? f.color : C.textMuted, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:'inherit', transition:'all .15s', boxShadow: active ? `0 0 10px ${f.color}18` : 'none', whiteSpace:'nowrap' }}
                   onMouseEnter={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = C.blueDim; b.style.borderColor = `${C.blue}35`; } }}
                   onMouseLeave={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = C.white; b.style.borderColor = C.border; } }}
                 >
@@ -425,7 +492,6 @@ const MyApplicationsPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Result count */}
       {!loading && filter.filtered.length > 0 && (
         <div style={{ fontSize:12, color:C.textMuted, fontWeight:600, marginBottom:10, padding:'0 2px', position:'relative', zIndex:2 }}>
           Showing <strong style={{ color:C.text }}>{filter.filtered.length}</strong> application{filter.filtered.length !== 1 ? 's' : ''}
@@ -434,14 +500,13 @@ const MyApplicationsPage: React.FC = () => {
         </div>
       )}
 
-      {/* ── Content ── */}
+      {/* Content */}
       <div style={{ position:'relative', zIndex:2 }}>
         <AnimatePresence mode="wait">
 
-          {/* Error */}
           {error && (
             <motion.div key="err" initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
-              style={{ padding:'14px 16px', background:C.dangerDim, border:`1px solid ${C.dangerBorder}`, borderRadius:12, color:C.danger, fontSize:13.5, display:'flex', alignItems:'center', gap:8, marginBottom:12 }}>
+              style={{ padding:'14px 16px', background:C.dangerDim, border:`1px solid ${C.dangerBorder}`, borderRadius:12, color:C.danger, fontSize:13.5, display:'flex', alignItems:'center', gap:8, marginBottom:12, flexWrap:'wrap' }}>
               <AlertCircle size={15}/> {error}
               <button onClick={refresh} style={{ marginLeft:'auto', background:'none', border:'none', cursor:'pointer', color:C.danger, fontWeight:700, fontSize:12, fontFamily:'inherit' }}>
                 Try again
@@ -449,7 +514,6 @@ const MyApplicationsPage: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Loading */}
           {loading && (
             <motion.div key="loading" initial={{ opacity:0 }} animate={{ opacity:1 }}>
               <Card style={{ padding:'60px 0', textAlign:'center' }}>
@@ -459,7 +523,6 @@ const MyApplicationsPage: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Empty state */}
           {!loading && apps.length === 0 && (
             <motion.div key="empty" initial={{ opacity:0, scale:0.97 }} animate={{ opacity:1, scale:1 }}>
               <Card style={{ padding:'80px 32px', textAlign:'center' }}>
@@ -480,7 +543,6 @@ const MyApplicationsPage: React.FC = () => {
             </motion.div>
           )}
 
-          {/* No filter results */}
           {!loading && apps.length > 0 && filter.filtered.length === 0 && (
             <motion.div key="no-results" initial={{ opacity:0 }} animate={{ opacity:1 }}>
               <Card style={{ padding:'60px 32px', textAlign:'center' }}>
@@ -495,7 +557,6 @@ const MyApplicationsPage: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Application list */}
           {!loading && filter.filtered.length > 0 && (
             <motion.div key="list" style={{ display:'flex', flexDirection:'column', gap:12 }}>
               {filter.filtered.map((app, i) => (

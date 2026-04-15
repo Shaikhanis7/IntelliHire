@@ -1,4 +1,4 @@
-// pages/JobPostingsPage.tsx
+// pages/JobPostingsPage.tsx — FULLY RESPONSIVE
 // Design: exact SourcingPage tokens — #f0f5ff bg, blue/teal/indigo/amber,
 //         Fraunces (headings) + DM Sans (body), frosted glass cards, dot-grid bg
 // Recruiter: create / edit / delete / toggle with JobFormModal
@@ -27,7 +27,7 @@ import { useJobs, useJobFilters, useJobModal } from '../features/jobs/hooks/useJ
 import { JobCard }            from '../features/jobs/components/JobCard';
 import { JobFormModal }       from '../features/jobs/components/JobFormModal';
 
-/* ─── Design tokens — SourcingPage exact match ──────────────────────────────── */
+/* ─── Design tokens ──────────────────────────────────────────── */
 const C = {
   bg:           '#f0f5ff',
   bgAlt:        '#e6eeff',
@@ -67,16 +67,15 @@ const C = {
   shadowTeal:   '0 4px 16px rgba(6,214,176,0.25)',
 };
 
-/* ─── helpers ────────────────────────────────────────────────────────────────── */
 const parseSkills = (s: string | string[] | null | undefined): string[] => {
   if (!s) return [];
   if (Array.isArray(s)) return s;
   return s.split(',').map(x => x.trim()).filter(Boolean);
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   BACKGROUND — dot grid + floating orbs (SourcingPage clone)
-═══════════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND
+═══════════════════════════════════════════════════════════════ */
 const BgPattern: React.FC = () => (
   <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
     <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: 680, height: 560, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(79,125,255,0.13) 0%, rgba(79,125,255,0.04) 50%, transparent 75%)', filter: 'blur(64px)', animation: 'jpOrbFloat1 18s ease-in-out infinite' }} />
@@ -94,9 +93,9 @@ const BgPattern: React.FC = () => (
   </div>
 );
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    SHARED MICRO-COMPONENTS
-═══════════════════════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties; delay?: number }> = ({ children, style, delay = 0 }) => (
   <div style={{
     background: 'rgba(255,255,255,0.82)',
@@ -119,7 +118,7 @@ const StatCard: React.FC<{ label: string; value: string | number; icon: React.Re
       background: hov ? C.white : 'rgba(255,255,255,0.80)',
       backdropFilter: 'blur(16px)',
       border: `1px solid ${hov ? color + '35' : C.border}`,
-      borderRadius: 16, padding: '16px 18px',
+      borderRadius: 16, padding: '14px 16px',
       boxShadow: hov ? `0 8px 32px ${color}18` : C.shadow,
       transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)',
       transform: hov ? 'translateY(-3px)' : 'none', cursor: 'default',
@@ -127,10 +126,10 @@ const StatCard: React.FC<{ label: string; value: string | number; icon: React.Re
       animationName: 'jpFadeUp', animationDuration: '0.5s',
       animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)',
     }}>
-      <div style={{ width: 36, height: 36, borderRadius: 10, marginBottom: 12, background: `${color}12`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition: 'box-shadow 0.25s' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 10, marginBottom: 10, background: `${color}12`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition: 'box-shadow 0.25s' }}>
         <span style={{ color, display: 'flex' }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: '-1px', lineHeight: 1, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: C.text, letterSpacing: '-1px', lineHeight: 1, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
       <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{label}</div>
     </div>
   );
@@ -138,7 +137,7 @@ const StatCard: React.FC<{ label: string; value: string | number; icon: React.Re
 
 const FilterBtn: React.FC<{ label: string; count: number; active: boolean; color: string; onClick: () => void }> = ({ label, count, active, color, onClick }) => (
   <button onClick={onClick} style={{
-    padding: '5px 12px', borderRadius: 8,
+    padding: '5px 11px', borderRadius: 8,
     border: `1px solid ${active ? color + '55' : C.border}`,
     background: active ? `${color}10` : C.white,
     color: active ? color : C.textMuted,
@@ -146,6 +145,7 @@ const FilterBtn: React.FC<{ label: string; count: number; active: boolean; color
     fontFamily: "'DM Sans', system-ui, sans-serif",
     transition: 'all 0.18s',
     boxShadow: active ? `0 0 10px ${color}18` : 'none',
+    whiteSpace: 'nowrap',
   }}
     onMouseEnter={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = `${color}08`; b.style.borderColor = `${color}35`; } }}
     onMouseLeave={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = C.white; b.style.borderColor = C.border; } }}
@@ -154,9 +154,9 @@ const FilterBtn: React.FC<{ label: string; count: number; active: boolean; color
   </button>
 );
 
-/* ═══════════════════════════════════════════════════════════════════════════════
-   RESUME REQUIRED MODAL (candidate flow)
-═══════════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   RESUME MODAL
+═══════════════════════════════════════════════════════════════ */
 const resumeService = {
   async hasResume(): Promise<boolean> {
     try { const r = await axiosInstance.get('/resumes/mine'); return Array.isArray(r.data) ? r.data.length > 0 : !!r.data; }
@@ -194,13 +194,13 @@ const ResumeModal: React.FC<{ jobTitle: string; jobId: number; onSuccess: () => 
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,62,0.55)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(13,27,62,0.55)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
     >
       <div style={{ background: C.white, border: `1px solid ${C.borderMid}`, borderRadius: 20, width: '100%', maxWidth: 480, boxShadow: '0 24px 64px rgba(15,30,80,0.18)', animation: 'jpFadeUp 0.25s ease both', overflow: 'hidden' }}>
         <div style={{ height: 3, background: `linear-gradient(90deg, ${C.blue}, ${C.teal})` }} />
-        <div style={{ padding: '20px 24px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ padding: '18px 20px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 11, background: C.blueDim, border: `1px solid ${C.blue}28`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: 11, background: C.blueDim, border: `1px solid ${C.blue}28`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <FileText size={17} style={{ color: C.blue }} />
             </div>
             <div>
@@ -208,10 +208,10 @@ const ResumeModal: React.FC<{ jobTitle: string; jobId: number; onSuccess: () => 
               <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2, fontFamily: "'DM Sans', system-ui, sans-serif" }}>Applying to: <strong style={{ color: C.blue }}>{jobTitle}</strong></div>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex', padding: 4 }}><X size={18} /></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex', padding: 4, flexShrink: 0 }}><X size={18} /></button>
         </div>
 
-        <div style={{ padding: '22px 24px' }}>
+        <div style={{ padding: '20px 20px' }}>
           {step === 'done' ? (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{ width: 56, height: 56, borderRadius: '50%', background: C.tealDim, border: `1px solid ${C.tealBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
@@ -230,13 +230,13 @@ const ResumeModal: React.FC<{ jobTitle: string; jobId: number; onSuccess: () => 
                 onDragLeave={() => setDrag(false)}
                 onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                 onClick={() => inputRef.current?.click()}
-                style={{ border: `2px dashed ${drag ? C.blue : file ? C.teal : C.borderMid}`, borderRadius: 14, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? C.blueDim : file ? C.tealDim : C.surface, transition: 'all 0.18s', marginBottom: 14 }}
+                style={{ border: `2px dashed ${drag ? C.blue : file ? C.teal : C.borderMid}`, borderRadius: 14, padding: '24px 16px', textAlign: 'center', cursor: 'pointer', background: drag ? C.blueDim : file ? C.tealDim : C.surface, transition: 'all 0.18s', marginBottom: 14 }}
               >
                 <input ref={inputRef} type="file" accept=".pdf,application/pdf" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
                 {file ? (
                   <>
                     <FileText size={22} style={{ color: C.teal, display: 'block', margin: '0 auto 10px' }} />
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: "'Fraunces', Georgia, serif" }}>{file.name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: "'Fraunces', Georgia, serif", wordBreak: 'break-all' }}>{file.name}</div>
                     <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{(file.size / 1024).toFixed(0)} KB · PDF</div>
                     <button onClick={e => { e.stopPropagation(); setFile(null); }} style={{ marginTop: 10, padding: '4px 12px', borderRadius: 7, border: `1px solid ${C.border}`, background: C.white, fontSize: 12, fontWeight: 600, color: C.textMuted, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif" }}>Change file</button>
                   </>
@@ -258,10 +258,10 @@ const ResumeModal: React.FC<{ jobTitle: string; jobId: number; onSuccess: () => 
         </div>
 
         {step !== 'done' && (
-          <div style={{ padding: '14px 24px 20px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <div style={{ padding: '12px 20px 18px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button onClick={onClose} style={{ padding: '9px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, fontSize: 13.5, fontWeight: 600, color: C.textMuted, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif" }}>Cancel</button>
             <button onClick={submit} disabled={!file || step === 'submitting'}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 22px', borderRadius: 9, background: !file ? C.surfaceDeep : C.gradBlue, border: 'none', color: !file ? C.textFaint : C.white, fontSize: 13.5, fontWeight: 700, cursor: !file || step === 'submitting' ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: !file ? 'none' : C.shadowBlue, transition: 'all 0.15s' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 20px', borderRadius: 9, background: !file ? C.surfaceDeep : C.gradBlue, border: 'none', color: !file ? C.textFaint : C.white, fontSize: 13.5, fontWeight: 700, cursor: !file || step === 'submitting' ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: !file ? 'none' : C.shadowBlue, transition: 'all 0.15s' }}>
               {step === 'submitting' ? <><Loader2 size={13} style={{ animation: 'jpSpin 1s linear infinite' }} /> Submitting…</> : <><ArrowRight size={13} /> Upload & Apply</>}
             </button>
           </div>
@@ -271,9 +271,9 @@ const ResumeModal: React.FC<{ jobTitle: string; jobId: number; onSuccess: () => 
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    CANDIDATE VIEW
-═══════════════════════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const CandidateView: React.FC = () => {
   const navigate = useNavigate();
   const { jobs, loading, error, load } = useJobs();
@@ -313,14 +313,14 @@ const CandidateView: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 22, position: 'relative', zIndex: 2, animationName: 'jpFadeUp', animationDuration: '0.4s', animationFillMode: 'both' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div className="jp-page-header" style={{ marginBottom: 22, position: 'relative', zIndex: 2, animationName: 'jpFadeUp', animationDuration: '0.4s', animationFillMode: 'both' }}>
+        <div className="jp-header-inner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div style={{ width: 50, height: 50, borderRadius: 15, background: C.gradBlue, boxShadow: C.shadowBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Briefcase size={22} color={C.white} />
             </div>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>
+              <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 700, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>
                 Open Positions
               </h1>
               <p style={{ fontSize: 13, color: C.textMuted, margin: '3px 0 0', fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -330,15 +330,15 @@ const CandidateView: React.FC = () => {
           </div>
           {appliedCount > 0 && (
             <button onClick={() => navigate('/my-applications')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.tealBorder}`, background: C.tealDim, fontSize: 13, fontWeight: 700, color: C.teal, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s' }}>
-              <ListChecks size={14} /> Track applications ({appliedCount})
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.tealBorder}`, background: C.tealDim, fontSize: 13, fontWeight: 700, color: C.teal, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+              <ListChecks size={14} /> Track ({appliedCount})
             </button>
           )}
         </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20, position: 'relative', zIndex: 2 }}>
+      <div className="jp-stat-grid" style={{ marginBottom: 20, position: 'relative', zIndex: 2 }}>
         <StatCard label="Total roles"  value={stats.total}   color={C.blue}   icon={<Briefcase size={14}/>}    delay={0}    />
         <StatCard label="Open now"     value={stats.active}  color={C.teal}   icon={<Star size={14}/>}          delay={0.06} />
         <StatCard label="Applied"      value={appliedCount}  color={C.indigo} icon={<CheckCircle size={14}/>}   delay={0.12} />
@@ -346,9 +346,9 @@ const CandidateView: React.FC = () => {
 
       {/* Search + filter */}
       <Card style={{ padding: '12px 14px', marginBottom: 16 }} delay={0.08}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint }} />
+        <div className="jp-filter-bar">
+          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint, pointerEvents: 'none' }} />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by title, skill, keyword…"
               style={{ width: '100%', padding: '8px 32px 8px 32px', border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.text, background: C.surface, fontFamily: "'DM Sans', system-ui, sans-serif", outline: 'none', transition: 'all 0.15s' }}
               onFocus={e => { e.target.style.borderColor = C.borderFocus; (e.target as HTMLInputElement).style.boxShadow = `0 0 0 3px rgba(79,125,255,0.10)`; }}
@@ -356,8 +356,8 @@ const CandidateView: React.FC = () => {
             />
             {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex' }}><X size={12} /></button>}
           </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Filter size={12} style={{ color: C.textFaint }} />
+          <div className="jp-filter-pills">
+            <Filter size={12} style={{ color: C.textFaint, flexShrink: 0 }} />
             <FilterBtn label="All"     count={stats.total}  active={statusFilter === 'all'}    color={C.blue}   onClick={() => setStatusFilter('all')}    />
             <FilterBtn label="Open"    count={stats.active} active={statusFilter === 'active'} color={C.teal}   onClick={() => setStatusFilter('active')} />
             <FilterBtn label="Applied" count={appliedCount} active={statusFilter === 'closed'} color={C.indigo} onClick={() => setStatusFilter('closed')} />
@@ -398,7 +398,7 @@ const CandidateView: React.FC = () => {
             </p>
           </Card>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
+          <div className="jp-job-grid">
             {filtered.map((job, i) => (
               <JobCard
                 key={job.id} job={job} index={i}
@@ -424,9 +424,9 @@ const CandidateView: React.FC = () => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    RECRUITER VIEW
-═══════════════════════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const RecruiterView: React.FC = () => {
   const navigate = useNavigate();
   const { jobs, loading, refreshing, error, load, createJob, updateJob, deleteJob, toggleJob } = useJobs();
@@ -446,14 +446,14 @@ const RecruiterView: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: 22, position: 'relative', zIndex: 2, animationName: 'jpFadeUp', animationDuration: '0.4s', animationFillMode: 'both' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+      <div className="jp-page-header" style={{ marginBottom: 22, position: 'relative', zIndex: 2, animationName: 'jpFadeUp', animationDuration: '0.4s', animationFillMode: 'both' }}>
+        <div className="jp-header-inner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 50, height: 50, borderRadius: 15, background: C.gradBlue, boxShadow: C.shadowBlue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 50, height: 50, borderRadius: 15, background: C.gradBlue, boxShadow: C.shadowBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <Briefcase size={22} color={C.white} />
             </div>
             <div>
-              <h1 style={{ fontSize: 24, fontWeight: 700, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>
+              <h1 style={{ fontSize: 'clamp(18px, 4vw, 24px)', fontWeight: 700, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>
                 Job Postings
               </h1>
               <p style={{ fontSize: 13, color: C.textMuted, margin: '3px 0 0', fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -461,22 +461,22 @@ const RecruiterView: React.FC = () => {
               </p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button onClick={() => load(true)} disabled={refreshing}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.white, fontSize: 12.5, fontWeight: 600, color: C.textMuted, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 12px', borderRadius: 10, border: `1px solid ${C.border}`, background: C.white, fontSize: 12.5, fontWeight: 600, color: C.textMuted, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s' }}>
               <RefreshCw size={12} style={{ animation: refreshing ? 'jpSpin 1s linear infinite' : 'none' }} />
-              {refreshing ? 'Refreshing…' : 'Refresh'}
+              <span className="jp-hide-xs">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
             </button>
             <button onClick={modal.openCreate}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 18px', borderRadius: 10, background: C.gradBlue, border: 'none', color: C.white, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: C.shadowBlue }}>
-              <Plus size={14} /> Post new job
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: C.gradBlue, border: 'none', color: C.white, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: C.shadowBlue, whiteSpace: 'nowrap' }}>
+              <Plus size={14} /> <span className="jp-hide-xs">Post new job</span><span className="jp-show-xs">Post</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20, position: 'relative', zIndex: 2 }}>
+      <div className="jp-stat-grid" style={{ marginBottom: 20, position: 'relative', zIndex: 2 }}>
         <StatCard label="Total postings" value={stats.total}  color={C.blue}      icon={<Briefcase size={14}/>}  delay={0}    />
         <StatCard label="Active"         value={stats.active} color={C.teal}      icon={<Star size={14}/>}       delay={0.06} />
         <StatCard label="Closed"         value={stats.closed} color={C.textMuted} icon={<Database size={14}/>}   delay={0.12} />
@@ -484,9 +484,9 @@ const RecruiterView: React.FC = () => {
 
       {/* Search + filter */}
       <Card style={{ padding: '12px 14px', marginBottom: 14 }} delay={0.06}>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 180, position: 'relative' }}>
-            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint }} />
+        <div className="jp-filter-bar">
+          <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+            <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint, pointerEvents: 'none' }} />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by title, location, skill…"
               style={{ width: '100%', padding: '8px 32px 8px 32px', border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.text, background: C.surface, fontFamily: "'DM Sans', system-ui, sans-serif", outline: 'none', transition: 'all 0.15s' }}
               onFocus={e => { e.target.style.borderColor = C.borderFocus; (e.target as HTMLInputElement).style.boxShadow = `0 0 0 3px rgba(79,125,255,0.10)`; }}
@@ -494,8 +494,8 @@ const RecruiterView: React.FC = () => {
             />
             {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex' }}><X size={12} /></button>}
           </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Filter size={12} style={{ color: C.textFaint }} />
+          <div className="jp-filter-pills">
+            <Filter size={12} style={{ color: C.textFaint, flexShrink: 0 }} />
             <FilterBtn label="All"    count={stats.total}  active={statusFilter === 'all'}    color={C.blue} onClick={() => setStatusFilter('all')}    />
             <FilterBtn label="Active" count={stats.active} active={statusFilter === 'active'} color={C.teal} onClick={() => setStatusFilter('active')} />
             <FilterBtn label="Closed" count={stats.closed} active={statusFilter === 'closed'} color={C.textMuted} onClick={() => setStatusFilter('closed')} />
@@ -565,14 +565,14 @@ const RecruiterView: React.FC = () => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════
    ROOT PAGE
-═══════════════════════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const JobPostingsPage: React.FC = () => {
   const { user } = useSelector((s: RootState) => s.auth);
 
   return (
-    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: C.bg, padding: 24, position: 'relative', overflow: 'hidden', minHeight: '100%' }}>
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: C.bg, padding: 'clamp(12px,3vw,24px)', position: 'relative', overflow: 'hidden', minHeight: '100%' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&display=swap');
 
@@ -581,19 +581,70 @@ const JobPostingsPage: React.FC = () => {
         @keyframes jpOrbFloat1{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,30px)} }
         @keyframes jpOrbFloat2{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(50px,-35px)} }
         @keyframes jpOrbFloat3{ 0%,100%{transform:translate(0,0)} 50%{transform:translate(-25px,20px)} }
-        @keyframes jFadeUp    { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes jModalUp   { from{opacity:0;transform:translateY(24px) scale(0.97)} to{opacity:1;transform:none} }
-        @keyframes jFadeIn    { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes jSpin      { to{transform:rotate(360deg)} }
 
-        *  { box-sizing:border-box; }
-        :: selection { background:rgba(79,125,255,0.18); color:#0d1b3e; }
+        * { box-sizing:border-box; }
+        ::selection { background:rgba(79,125,255,0.18); color:#0d1b3e; }
         input::placeholder,textarea::placeholder { color:#8fa3c8; font-weight:400; }
         input:focus,textarea:focus { outline:none; }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:transparent; }
         ::-webkit-scrollbar-thumb { background:rgba(79,125,255,0.18); border-radius:99px; }
         textarea { color:#0d1b3e !important; }
+
+        /* ── Layout classes ── */
+        .jp-page-header { margin-bottom:22px; position:relative; z-index:2; }
+        .jp-header-inner { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+
+        .jp-stat-grid {
+          display:grid;
+          grid-template-columns:repeat(3,1fr);
+          gap:10px;
+        }
+
+        .jp-filter-bar {
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+
+        .jp-filter-pills {
+          display:flex;
+          gap:5px;
+          flex-wrap:wrap;
+          align-items:center;
+        }
+
+        .jp-job-grid {
+          display:grid;
+          grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+          gap:14px;
+        }
+
+        /* show/hide helpers */
+        .jp-hide-xs { display:inline; }
+        .jp-show-xs { display:none; }
+
+        /* ── Tablet (≤768px) ── */
+        @media(max-width:768px) {
+          .jp-header-inner { gap:10px; }
+          .jp-stat-grid { grid-template-columns:repeat(3,1fr); gap:8px; }
+          .jp-filter-bar { flex-direction:column; align-items:stretch; }
+          .jp-filter-pills { justify-content:flex-start; }
+          .jp-job-grid { grid-template-columns:1fr; }
+        }
+
+        /* ── Mobile (≤520px) ── */
+        @media(max-width:520px) {
+          .jp-stat-grid { grid-template-columns:repeat(3,1fr); gap:6px; }
+          .jp-hide-xs { display:none; }
+          .jp-show-xs { display:inline; }
+        }
+
+        /* ── Very small (≤380px) ── */
+        @media(max-width:380px) {
+          .jp-stat-grid { grid-template-columns:1fr 1fr; }
+        }
       `}</style>
 
       <BgPattern />
