@@ -10,16 +10,21 @@ Orchestrates the full resume ingestion pipeline:
               →  persist Resume + ResumeSection rows
               →  return ResumeUploadResponse
 
-Also exposes attach_embedding_to_resume() for deferred
-re-embedding (e.g. background worker).
+Also exposes attach_embedding_to_resume() for deferred re-embedding.
 
-experience_years changes:
+Celery removed:
+  process_resume_upload_task was a Celery task that ran parse → embed →
+  bulk_create_resume_sections after the fast intake path.  It is now a plain
+  async function — process_resume_upload() — run via FastAPI BackgroundTasks.
+  The caller (apply_for_job_with_resume) passes a BackgroundTasks instance
+  instead of calling .delay().
+
+experience_years:
   - upload_resume_internal(): computes total_experience_years(parsed) and
-    passes it to bulk_create_resume_sections() — fixes the profile-page flow.
-  - upload_resume_fast(): does NOT call bulk_create_resume_sections() —
-    sections are written by the Celery task (process_resume_upload_task)
-    which already has the fix applied.
-  - parse_resume() is unchanged — returns ParsedResumeSchema with
+    passes it to bulk_create_resume_sections().
+  - upload_resume_fast(): bare Resume row only; heavy work is done by
+    process_resume_upload() which is enqueued as a background task.
+  - parse_resume() unchanged — returns ParsedResumeSchema with
     ExperienceEntry.years populated by LLM.
 """
 
@@ -29,7 +34,7 @@ from src.config.settings import settings
 import json
 import logging
 
-from fastapi import UploadFile
+from fastapi import UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.data.repositories.resume_repo import (
@@ -47,6 +52,7 @@ from src.core.services.resume_langchain_service import (
     ResumeFileExtractor,
     ParsedResumeSchema,
 )
+from src.data.clients.postgres_client import get_db as get_db_session # async session factory for background use
 
 log = logging.getLogger(__name__)
 
@@ -64,9 +70,9 @@ async def parse_resume(raw_text: str) -> ParsedResumeSchema:
     Calls the LangChain chain to extract all resume sections.
     Returns a ParsedResumeSchema Pydantic model.
 
-    Each ExperienceEntry in the result carries a .years int field
-    (populated by the LLM from the duration string, 0 if unknown).
-    Call ResumeSectionEmbedder.total_experience_years(parsed) to get the total.
+    Each ExperienceEntry carries a .years int field populated by the LLM
+    (0 if unknown).  Call ResumeSectionEmbedder.total_experience_years(parsed)
+    to get the total.
     """
     return await _parser.parse_async(raw_text)
 
@@ -96,8 +102,7 @@ async def attach_embedding_to_resume(
 ) -> None:
     """
     Stores the full-resume embedding on the Resume row.
-    Called inline from upload_resume_internal() but can also be used by a
-    background worker to re-embed without re-uploading the file.
+    Called inline from upload_resume_internal() and from process_resume_upload().
     """
     resume = await get_resume(db, resume_id)
     if not resume:
@@ -109,8 +114,85 @@ async def attach_embedding_to_resume(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5.  UPLOAD RESUME FROM APPLICATION  (internal → S3, fully synchronous)
-#     Called from the profile page standalone upload flow.
+# 5.  BACKGROUND TASK  (replaces Celery process_resume_upload_task)
+#
+#     Called by FastAPI BackgroundTasks after upload_resume_fast() returns.
+#     Opens its own DB session so it runs independently of the request session.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def process_resume_upload(
+    resume_id: int,
+    candidate_id: int,
+    raw_text: str,
+) -> None:
+    """
+    Heavy post-intake work that runs in the background after the HTTP response
+    has already been sent to the candidate.
+
+    Steps
+    -----
+    1. LangChain parse  →  ParsedResumeSchema
+    2. Compute total experience years
+    3. Embed all sections  +  full-resume embedding
+    4. Persist ResumeSection rows (with experience_years)
+    5. Attach full embedding to the Resume row
+
+    This is the direct replacement for the old Celery task
+    ``process_resume_upload_task``.  It is registered with FastAPI
+    ``BackgroundTasks`` by ``apply_for_job_with_resume()``.
+    """
+    log.info(
+        f"[bg] process_resume_upload started — "
+        f"resume_id={resume_id} candidate_id={candidate_id}"
+    )
+    try:
+        # ── own DB session (request session already closed) ───────────────────
+        async with get_db_session() as db:
+
+            # 1. LangChain parse
+            parsed: ParsedResumeSchema = await parse_resume(raw_text)
+
+            # 2. experience years
+            experience_years = ResumeSectionEmbedder.total_experience_years(parsed)
+            log.info(
+                f"[bg] resume_id={resume_id} "
+                f"experience_years={experience_years} "
+                f"experience_entries={len(parsed.experience)}"
+            )
+
+            # 3. embeddings
+            section_embeddings = await generate_resume_embedding(parsed)
+            full_embedding     = _embedder.embed_full_resume(parsed)
+
+            # 4. persist sections + experience_years
+            section_texts = ResumeSectionEmbedder.section_texts(parsed)
+            sections = await bulk_create_resume_sections(
+                db,
+                resume_id=resume_id,
+                sections=section_texts,
+                section_embeddings=section_embeddings,
+                experience_years=experience_years,
+            )
+
+            # 5. attach full embedding
+            await attach_embedding_to_resume(db, resume_id, full_embedding)
+
+            log.info(
+                f"[bg] process_resume_upload done — "
+                f"resume_id={resume_id} sections={len(sections)} "
+                f"experience_years={experience_years}"
+            )
+
+    except Exception:
+        log.exception(
+            f"[bg] process_resume_upload FAILED — "
+            f"resume_id={resume_id} candidate_id={candidate_id}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6.  UPLOAD RESUME FROM APPLICATION  (internal → S3, fully synchronous)
+#     Called from the profile-page standalone upload flow.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def upload_resume_internal(
@@ -122,8 +204,8 @@ async def upload_resume_internal(
     Full synchronous pipeline for standalone resume upload (profile page):
       read bytes → S3 upload → extract text → LangChain parse → embed → persist
 
-    experience_years is computed here from the LLM-parsed result and written
-    to the experience ResumeSection row via bulk_create_resume_sections().
+    experience_years is computed from the LLM-parsed result and written to the
+    experience ResumeSection row via bulk_create_resume_sections().
     """
     import asyncio
 
@@ -138,10 +220,7 @@ async def upload_resume_internal(
     # ── 2. LangChain parse ────────────────────────────────────────────────────
     parsed: ParsedResumeSchema = await parse_resume(raw_text)
 
-    # ── 3. compute experience_years from LLM output ───────────────────────────
-    # Returns int (sum of ExperienceEntry.years) or None when LLM found no
-    # usable durations → bulk_create_resume_sections leaves the column NULL
-    # → scoring/sourcing falls back to regex automatically.
+    # ── 3. compute experience_years ───────────────────────────────────────────
     experience_years = ResumeSectionEmbedder.total_experience_years(parsed)
     log.info(
         f"[upload_resume_internal] candidate_id={candidate_id} "
@@ -177,7 +256,7 @@ async def upload_resume_internal(
         resume_id=resume.id,
         sections=section_texts,
         section_embeddings=section_embeddings,
-        experience_years=experience_years,   # ← fixed: was `experience_years | None`
+        experience_years=experience_years,
     )
 
     # ── 9. attach full embedding ──────────────────────────────────────────────
@@ -204,8 +283,9 @@ async def upload_resume_internal(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 6.  UPLOAD RESUME FAST  (thin intake for job application flow)
-#     Called from apply_for_job_with_resume() — heavy work deferred to Celery.
+# 7.  UPLOAD RESUME FAST  (thin intake for job application flow)
+#     Called from apply_for_job_with_resume() — heavy work runs as a
+#     FastAPI BackgroundTask (process_resume_upload).
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def upload_resume_fast(
@@ -221,15 +301,11 @@ async def upload_resume_fast(
       2. Extract raw text (CPU-only, no LLM, fast)
       3. Upload bytes to S3
       4. Persist a bare Resume row (no sections, no embedding yet)
-      5. Return resume_id + raw_text so Celery task can pick them up
+      5. Return resume_id + raw_text so the background task can pick them up
 
     The heavy work (LangChain parse → section rows → experience_years →
-    full embedding) is dispatched as a Celery task by the caller
-    (apply_for_job_with_resume → process_resume_upload_task).
-
-    NOTE: bulk_create_resume_sections is NOT called here — sections including
-    experience_years are written by process_resume_upload_task which has the
-    experience_years fix applied.
+    full embedding) is run by process_resume_upload(), which the caller
+    registers with FastAPI BackgroundTasks.
 
     Returns
     -------
@@ -262,7 +338,7 @@ async def upload_resume_fast(
 
     log.info(
         f"[upload_resume_fast] resume_id={resume.id} v{version} "
-        f"s3={s3_key} | parse+embed+experience_years deferred to Celery"
+        f"s3={s3_key} | parse+embed+experience_years deferred to BackgroundTask"
     )
 
     return {

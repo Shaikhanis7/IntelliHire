@@ -2,20 +2,22 @@
 src/core/services/application_service.py
 
 Changes in this version:
+  - Celery removed: process_resume_upload_task.delay() replaced with
+    background_tasks.add_task(process_resume_upload, ...) using FastAPI
+    BackgroundTasks.  apply_for_job_with_resume() now accepts a
+    ``background_tasks: BackgroundTasks`` parameter which the router must
+    supply (it is available for free on every FastAPI endpoint).
   - get_job_applications() returns sourcing_rank, sourcing_score, sourcing_id,
     fit_summary, source_tag on every application row (all via getattr so they
     are safe even before the migration runs)
-  - sync_sourcing_scores_to_applications() added — called by sourcing_service
-    after ranking; writes scores + rank back to the Application rows so the
-    recruiter dashboard reflects sourcing results immediately
+  - sync_sourcing_scores_to_applications() unchanged
   - _serialize_application() (candidate view) unchanged
   - All scores stored as 0.0-1.0 in DB; multiplied ×100 once at the boundary
 
-  experience_years changes:
-  - _compute_rule_score() now reads experience_years directly from the
-    ResumeSection column (LLM-extracted strict integer) when available.
-    Falls back to _infer_experience_years() regex only when the column is NULL
-    (legacy rows or unprocessed external candidates).
+  experience_years:
+  - _compute_rule_score() reads experience_years from the ResumeSection column
+    (LLM int) when available; falls back to _infer_experience_years() regex
+    when NULL (legacy rows or unprocessed external candidates).
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import re
 from typing import Optional
 
 import numpy as np
+from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -49,10 +52,8 @@ from src.core.exceptions.application_exceptions import (
     NotAuthorized,
 )
 
-
 from src.observability.logging.logger import setup_logger
 log = setup_logger()
-
 
 from src.core.services.resume_langchain_service import ResumeSectionEmbedder
 _embedder = ResumeSectionEmbedder()
@@ -151,11 +152,8 @@ async def sync_sourcing_scores_to_applications(
     After sourcing ranks candidates, write their scores + rank back into the
     Application rows so the recruiter dashboard reflects the results immediately.
 
-    Only updates rows that already exist (i.e. candidates who applied).
-    External candidates who haven't applied yet are skipped — HR must invite
-    them manually via the sourcing results panel.
-
-    Called by sourcing_service.source_candidates() after _save_sourcing_candidates().
+    Only updates rows that already exist (candidates who applied).
+    External candidates who haven't applied yet are skipped.
     """
     from src.data.models.postgres.application import Application
 
@@ -204,10 +202,38 @@ async def apply_for_job_with_resume(
     db: AsyncSession,
     candidate_id: int,
     job_id: int,
+    background_tasks: BackgroundTasks,   # ← replaces Celery; injected by router
     file=None,
 ) -> dict:
-    from src.core.services.resume_service import upload_resume_fast
-    from src.core.tasks.resume_tasks import process_resume_upload_task
+    """
+    Applies a candidate for a job, optionally uploading a new resume.
+
+    Fast path
+    ---------
+    If a file is supplied:
+      1. upload_resume_fast() — S3 upload + bare Resume row (synchronous,
+         completes before the HTTP response is sent).
+      2. background_tasks.add_task(process_resume_upload, ...) — parse,
+         embed, and persist ResumeSection rows after the response is sent.
+         This replaces the old ``process_resume_upload_task.delay()`` Celery call.
+
+    The router must obtain a BackgroundTasks instance from FastAPI dependency
+    injection and pass it here:
+
+        @router.post("/apply")
+        async def apply_endpoint(
+            ...,
+            background_tasks: BackgroundTasks,   # FastAPI injects this
+            db: AsyncSession = Depends(get_db),
+        ):
+            return await apply_for_job_with_resume(
+                db, candidate_id, job_id, background_tasks, file
+            )
+    """
+    from src.core.services.resume_service import (
+        upload_resume_fast,
+        process_resume_upload,
+    )
 
     job = await get_job_details(db, job_id)
     if not job:
@@ -222,16 +248,18 @@ async def apply_for_job_with_resume(
     if file and getattr(file, "filename", None):
         resume_info = await upload_resume_fast(db, candidate_id=candidate_id, file=file)
 
-        # ── 2. dispatch heavy work to Celery (non-blocking) ──────────────────
-        # The Celery task calls parse_async → total_experience_years() and
-        # persists experience_years on the ResumeSection row.
-        process_resume_upload_task.delay(
+        # ── 2. enqueue heavy work as a FastAPI background task ────────────────
+        # process_resume_upload() calls parse_async → total_experience_years()
+        # and persists experience_years on the ResumeSection row, exactly as
+        # the old Celery task did — but without a broker/worker dependency.
+        background_tasks.add_task(
+            process_resume_upload,
             resume_id=resume_info["resume_id"],
             candidate_id=candidate_id,
             raw_text=resume_info["raw_text"],
         )
         log.info(
-            f"[apply] Celery task queued — resume_id={resume_info['resume_id']} "
+            f"[apply] BackgroundTask queued — resume_id={resume_info['resume_id']} "
             f"candidate_id={candidate_id}"
         )
 
@@ -395,7 +423,7 @@ def _compute_rule_score(resume, sections, job) -> float:
 
     Experience years resolution order (highest priority first):
       1. ResumeSection.experience_years — strict integer from LLM parser.
-         Set by the Celery task via bulk_create_resume_sections().
+         Set by process_resume_upload() via bulk_create_resume_sections().
       2. _infer_experience_years() — regex fallback on raw parsed_text.
          Used for legacy rows (column NULL) and any resume not yet
          processed by the new pipeline.
@@ -417,13 +445,13 @@ def _compute_rule_score(resume, sections, job) -> float:
     # ── experience years: DB column > regex fallback ──────────────────────────
     exp_section = next((s for s in sections if s.section_type == "experience"), None)
     if exp_section is not None and exp_section.experience_years is not None:
-        exp_years = exp_section.experience_years          # strict LLM int ✓
+        exp_years = exp_section.experience_years
         log.debug(
             f"[rule_score] Using DB experience_years={exp_years} "
             f"for resume_id={getattr(resume, 'id', '?')}"
         )
     else:
-        exp_years = _infer_experience_years(resume.parsed_text or "")  # regex fallback
+        exp_years = _infer_experience_years(resume.parsed_text or "")
         log.debug(
             f"[rule_score] experience_years column NULL — "
             f"regex fallback={exp_years} for resume_id={getattr(resume, 'id', '?')}"
@@ -446,18 +474,18 @@ def _compute_rule_score(resume, sections, job) -> float:
         matched = sum(1 for s in required_skills if s in candidate_skills)
         score  += 0.40 * (matched / len(required_skills))
     else:
-        score  += 0.40   # no requirements → full credit
+        score  += 0.40
 
     req_exp = job.experience_required or 0
     if req_exp > 0:
         score += 0.30 * min(exp_years / req_exp, 1.0)
     else:
-        score += 0.30   # no experience requirement → full credit
+        score += 0.30
 
     if has_certs:
         score += 0.15
 
-    score += 0.15        # baseline
+    score += 0.15   # baseline
 
     return round(min(score, 1.0), 4)
 
@@ -501,7 +529,7 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
 def _infer_experience_years(text: str) -> int:
     """
     Regex fallback — extracts 4-digit years from raw text and returns the span.
-    Used when ResumeSection.experience_years is NULL (legacy / unprocessed rows).
+    Used when ResumeSection.experience_years is NULL.
     """
     years = re.findall(r"(20\d{2}|19\d{2})", text)
     if len(years) >= 2:
