@@ -5,16 +5,16 @@ import { Loader2 } from 'lucide-react';
 import type { RootState } from '../../app/store';
 
 interface ProtectedRouteProps {
-  role?:                 string;
-  redirectTo?:           string;   // where to send unauthenticated users (default: '/')
-  unauthorizedRedirect?: string;   // where to send wrong-role users  (default: '/dashboard')
+  role?:                 string | string[];   // ← accept array or single role
+  redirectTo?:           string;
+  unauthorizedRedirect?: string;
   children?:             React.ReactNode;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   role,
-  redirectTo           = '/',           // ← unauthenticated → Landing page
-  unauthorizedRedirect = '/dashboard',  // ← wrong role      → Dashboard
+  redirectTo           = '/',
+  unauthorizedRedirect = '/dashboard',
   children,
 }) => {
   const { user, isAuthenticated, isInitialized } = useSelector(
@@ -49,8 +49,11 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   /* ── 3. Authenticated but wrong role → Dashboard (or unauthorizedRedirect) ─ */
-  if (role && user?.role !== role) {
-    return <Navigate to={unauthorizedRedirect} replace />;
+  if (role) {
+    const allowed = Array.isArray(role) ? role : [role];
+    if (!allowed.includes(user?.role ?? '')) {
+      return <Navigate to={unauthorizedRedirect} replace />;
+    }
   }
 
   /* ── 4. All good ─────────────────────────────────────────────────────────── */

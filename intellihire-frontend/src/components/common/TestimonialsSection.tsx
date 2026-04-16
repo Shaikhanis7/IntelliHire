@@ -1,5 +1,5 @@
 // features/landing/components/TestimonialsSection.tsx
-// Blue Professional — amber stars, blue CTA gradient text, dark navy panel
+// Fully responsive — mobile-first
 
 import React, { useRef } from 'react';
 import { motion, useInView } from 'framer-motion';
@@ -32,6 +32,8 @@ const TESTIMONIALS = [
   },
 ];
 
+const sectionPad = 'clamp(64px, 10vh, 110px) clamp(20px, 5vw, calc((100vw - 1240px)/2 + 20px))';
+
 /* ─── Testimonials section ───────────────────────────────────────────────────── */
 export const TestimonialsSection: React.FC = () => {
   const ref = useRef(null);
@@ -40,10 +42,7 @@ export const TestimonialsSection: React.FC = () => {
   return (
     <section
       id="testimonials"
-      style={{
-        padding: '110px max(24px, calc((100vw - 1240px)/2))',
-        background: C.bg,
-      }}
+      style={{ padding: sectionPad, background: C.bg }}
     >
       <div ref={ref}>
         <SectionHeader
@@ -57,7 +56,7 @@ export const TestimonialsSection: React.FC = () => {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
         gap: 18,
       }}>
         {TESTIMONIALS.map((t, i) => {
@@ -73,7 +72,7 @@ export const TestimonialsSection: React.FC = () => {
               transition={{ duration: 0.6, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}
               whileHover={{ y: -5, boxShadow: C.shadowHov, borderColor: `${t.color}33` }}
               style={{
-                padding: '30px 28px',
+                padding: 'clamp(20px, 3vw, 30px) clamp(18px, 2.5vw, 28px)',
                 background: C.bgCard,
                 border: `1px solid ${C.border}`,
                 borderRadius: 18,
@@ -107,8 +106,12 @@ export const TestimonialsSection: React.FC = () => {
               </div>
 
               <p style={{
-                fontSize: 15, color: C.textMid, lineHeight: 1.78,
-                marginBottom: 26, fontStyle: 'italic', fontWeight: 400,
+                fontSize: 'clamp(13.5px, 1.8vw, 15px)',
+                color: C.textMid,
+                lineHeight: 1.78,
+                marginBottom: 26,
+                fontStyle: 'italic',
+                fontWeight: 400,
                 fontFamily: FONTS.body,
               }}>
                 "{t.quote}"
@@ -152,17 +155,32 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
 
+  const btnBase: React.CSSProperties = {
+    padding: 'clamp(12px, 2vw, 15px) clamp(20px, 4vw, 36px)',
+    borderRadius: 12,
+    fontSize: 'clamp(14px, 1.8vw, 15.5px)',
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: FONTS.body,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+    width: '100%', maxWidth: 280, border: 'none',
+  };
+
   return (
-    <section style={{ padding: '80px max(24px, calc((100vw - 1200px)/2))', background: C.bgAlt }}>
+    <section style={{ padding: `clamp(48px, 8vw, 80px) clamp(16px, 4vw, calc((100vw - 1200px)/2 + 16px))`, background: C.bgAlt }}>
       <motion.div
         ref={ref}
         initial={{ opacity: 0, y: 36 }}
         animate={isInView ? { opacity: 1, y: 0 } : {}}
         transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+        className="cta-panel"
         style={{
           background: 'linear-gradient(155deg, #0a1628 0%, #0f2044 50%, #0a1a38 100%)',
-          borderRadius: 26, padding: '76px max(40px, 6vw)',
-          textAlign: 'center', position: 'relative', overflow: 'hidden',
+          borderRadius: 26,
+          padding: 'clamp(48px, 8vw, 76px) clamp(24px, 6vw, calc(6vw + 10px))',
+          textAlign: 'center',
+          position: 'relative',
+          overflow: 'hidden',
           border: `1px solid rgba(37,99,235,0.22)`,
           boxShadow: '0 0 80px rgba(37,99,235,0.1), 0 32px 80px rgba(10,22,40,0.2)',
         }}
@@ -195,8 +213,12 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
             animate={isInView ? { opacity: 1, y: 0 } : {}}
             transition={{ duration: 0.65, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
             style={{
-              fontSize: 'clamp(28px, 5vw, 56px)', fontWeight: 800, color: '#f0f4fa',
-              letterSpacing: '-2px', lineHeight: 1.08, margin: '0 0 18px',
+              fontSize: 'clamp(26px, 5vw, 56px)',
+              fontWeight: 800,
+              color: '#f0f4fa',
+              letterSpacing: 'clamp(-1px, -0.2vw, -2px)',
+              lineHeight: 1.08,
+              margin: '0 0 18px',
               fontFamily: FONTS.display,
             }}
           >
@@ -206,7 +228,7 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-              color: '#60a5fa',           // fallback
+              color: '#60a5fa',
               display: 'inline-block',
             }}>
               10× faster?
@@ -218,28 +240,28 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
             animate={isInView ? { opacity: 1 } : {}}
             transition={{ duration: 0.55, delay: 0.25 }}
             style={{
-              fontSize: 17, color: C.panelMuted, lineHeight: 1.75,
-              maxWidth: 490, margin: '0 auto 44px', fontFamily: FONTS.body,
+              fontSize: 'clamp(14px, 2vw, 17px)',
+              color: C.panelMuted,
+              lineHeight: 1.75,
+              maxWidth: 490,
+              margin: '0 auto clamp(28px, 5vw, 44px)',
+              fontFamily: FONTS.body,
             }}
           >
             Join 1,200+ companies using IntelliHire to find, score, and hire exceptional talent — automatically.
           </motion.p>
 
           {/* Buttons */}
-          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 32 }}>
+          <div
+            className="cta-buttons"
+            style={{ marginBottom: 32 }}
+          >
             {isAuthenticated ? (
               <motion.button
                 whileHover={{ scale: 1.04, boxShadow: C.shadowGold }}
                 whileTap={{ scale: 0.97 }}
                 onClick={onDashboard}
-                style={{
-                  padding: '15px 36px', borderRadius: 12,
-                  background: C.gradGold, border: 'none',
-                  fontSize: 15.5, fontWeight: 700, color: '#fff',
-                  cursor: 'pointer', fontFamily: FONTS.body,
-                  display: 'flex', alignItems: 'center', gap: 9,
-                  boxShadow: '0 6px 24px rgba(37,99,235,0.45)',
-                }}
+                style={{ ...btnBase, background: C.gradGold, color: '#fff', boxShadow: '0 6px 24px rgba(37,99,235,0.45)' }}
               >
                 <LayoutDashboard size={15} /> Open Dashboard <ArrowRight size={15} />
               </motion.button>
@@ -249,14 +271,7 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
                   whileHover={{ scale: 1.04, boxShadow: C.shadowGold }}
                   whileTap={{ scale: 0.97 }}
                   onClick={onSignup}
-                  style={{
-                    padding: '15px 36px', borderRadius: 12,
-                    background: C.gradGold, border: 'none',
-                    fontSize: 15.5, fontWeight: 700, color: '#fff',
-                    cursor: 'pointer', fontFamily: FONTS.body,
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    boxShadow: '0 6px 24px rgba(37,99,235,0.45)',
-                  }}
+                  style={{ ...btnBase, background: C.gradGold, color: '#fff', boxShadow: '0 6px 24px rgba(37,99,235,0.45)' }}
                 >
                   Get started free <ArrowRight size={15} />
                 </motion.button>
@@ -265,11 +280,11 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
                   whileHover={{ scale: 1.03, borderColor: C.gold, color: C.goldLight }}
                   whileTap={{ scale: 0.97 }}
                   style={{
-                    padding: '15px 32px', borderRadius: 12,
+                    ...btnBase,
                     border: `1.5px solid rgba(255,255,255,0.14)`,
                     background: 'rgba(255,255,255,0.06)',
-                    fontSize: 15.5, fontWeight: 600, color: C.panelMuted,
-                    cursor: 'pointer', fontFamily: FONTS.body,
+                    fontWeight: 600,
+                    color: C.panelMuted,
                     transition: 'border-color 0.2s, color 0.2s',
                   }}
                 >
@@ -280,7 +295,7 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
           </div>
 
           {/* Trust badges */}
-          <div style={{ display: 'flex', gap: 28, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="cta-badges">
             {['No credit card required', 'Cancel anytime', 'SOC 2 compliant'].map(t => (
               <motion.span
                 key={t}
@@ -289,7 +304,9 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
                 transition={{ duration: 0.5, delay: 0.5 }}
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: 13, color: C.panelMuted, fontWeight: 500,
+                  fontSize: 'clamp(12px, 1.5vw, 13px)',
+                  color: C.panelMuted,
+                  fontWeight: 500,
                   fontFamily: FONTS.body,
                 }}
               >
@@ -306,49 +323,50 @@ export const CTASection: React.FC<CTAProps> = ({ isAuthenticated, onSignup, onDa
 /* ─── Footer ─────────────────────────────────────────────────────────────────── */
 export const Footer: React.FC = () => (
   <footer style={{
-    padding: '32px max(24px, calc((100vw - 1240px)/2))',
-    background: C.bg, borderTop: `1px solid ${C.border}`,
-    display: 'flex', alignItems: 'center',
-    justifyContent: 'space-between', flexWrap: 'wrap', gap: 16,
+    padding: `clamp(24px, 4vw, 32px) clamp(20px, 5vw, calc((100vw - 1240px)/2 + 20px))`,
+    background: C.bg,
+    borderTop: `1px solid ${C.border}`,
   }}>
-    {/* Brand */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 8,
-        background: C.gradGold,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Briefcase size={13} color="#fff" />
+    <div className="footer-inner">
+      {/* Brand */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: C.gradGold,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Briefcase size={13} color="#fff" />
+        </div>
+        <span style={{
+          fontSize: 15, fontWeight: 700, color: C.text,
+          letterSpacing: '-0.3px', fontFamily: FONTS.display,
+        }}>
+          IntelliHire
+        </span>
       </div>
-      <span style={{
-        fontSize: 15, fontWeight: 700, color: C.text,
-        letterSpacing: '-0.3px', fontFamily: FONTS.display,
-      }}>
-        IntelliHire
-      </span>
-    </div>
 
-    {/* Copyright */}
-    <p style={{ fontSize: 12.5, color: C.textFaint, margin: 0, fontFamily: FONTS.body }}>
-      © {new Date().getFullYear()} IntelliHire. All rights reserved.
-    </p>
+      {/* Copyright */}
+      <p style={{ fontSize: 12.5, color: C.textFaint, margin: 0, fontFamily: FONTS.body }}>
+        © {new Date().getFullYear()} IntelliHire. All rights reserved.
+      </p>
 
-    {/* Links */}
-    <div style={{ display: 'flex', gap: 24 }}>
-      {['Privacy', 'Terms', 'Contact'].map(l => (
-        <motion.a
-          key={l}
-          href="#"
-          whileHover={{ color: C.gold }}
-          style={{
-            fontSize: 13, color: C.textMuted,
-            textDecoration: 'none', transition: 'color 0.15s',
-            fontWeight: 500, fontFamily: FONTS.body,
-          }}
-        >
-          {l}
-        </motion.a>
-      ))}
+      {/* Links */}
+      <div className="footer-links" style={{ display: 'flex', gap: 24 }}>
+        {['Privacy', 'Terms', 'Contact'].map(l => (
+          <motion.a
+            key={l}
+            href="#"
+            whileHover={{ color: C.gold }}
+            style={{
+              fontSize: 13, color: C.textMuted,
+              textDecoration: 'none', transition: 'color 0.15s',
+              fontWeight: 500, fontFamily: FONTS.body,
+            }}
+          >
+            {l}
+          </motion.a>
+        ))}
+      </div>
     </div>
   </footer>
 );

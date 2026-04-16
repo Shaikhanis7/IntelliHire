@@ -1,5 +1,5 @@
 """
-src/core/services/sourcing_service.py — AGENTIC AI  (v9)
+src/core/services/sourcing_service.py — AGENTIC AI  (v10)
 
 All LLM intelligence is now in:
   src/control/agents/sourcing_agent.py  ← SourcingAgent
@@ -26,22 +26,22 @@ Internal search pass order
   Pass 6  External scraping fills remainder
           Tag:  external
 
-eligibility changes (v9 → any-skill):
-  - ANY required skill must match (not ALL). A candidate is eligible if at least
-    one required skill is found as a distinct token in their skills section.
-  - Token-based skill matching — splits skills section on commas/newlines/pipes
-    before checking. Prevents 'reactive' matching 'react', etc.
-  - Narrative token filtering — tokens longer than 5 words are dropped before
-    matching. Prevents false positives when the skills section content is full
-    resume prose.
-  - Whole-word boundary check within tokens — 'react.js' still matches 'react'.
-  - Skills section used preferentially over full parsed_text.
-  - Falls back to full parsed_text only for external scrape (sections not written yet).
-  - Internal candidates (passes 1-5) are REJECTED if skills_section_text is None
-    — no fallback to parsed_text for internal. Only external scrape uses full-text fallback.
+eligibility changes (v10 → full-time experience only):
+  - experience_years in DB now holds FULL-TIME years only.
+    LLM sets ExperienceEntry.years=0 for internships/part-time/freelance.
+    ResumeSectionEmbedder.total_experience_years() sums only is_fulltime=True entries.
+    bulk_create_resume_sections() writes that full-time-only sum to the experience
+    section row, so _fetch_resume_eligibility_data() reads full-time years directly.
+  - _passes_eligibility() source label updated to "DB (full-time only)" to make
+    logs clearly indicate that the experience gate is full-time filtered.
+  - External scrape (_scrape_and_ingest): total_exp_years from LLM parse is now
+    full-time only (via updated total_experience_years()); log line updated.
 
-experience_years:
-  - DB column (LLM int) used when available; regex fallback when NULL.
+eligibility (v9 carry-over):
+  - ANY required skill must match (not ALL).
+  - Token-based skill matching with whole-word boundary check.
+  - Internal candidates rejected if skills_section_text is None.
+  - External scrape falls back to full parsed_text (no sections yet).
 
 Other:
   - CROSS_JOB_EXCLUDE includes "shortlisted"
@@ -206,11 +206,13 @@ def _passes_eligibility(
     Relaxed eligibility gate — AT LEAST ONE required skill must be present
     as a distinct token in the skills section (ANY-match, not ALL-match).
 
-    Additionally, the agent's background check (role relevance) is handled
-    separately in sourcing_service via SourcingAgent.background_matches_role().
-    This gate only enforces:
-      1. At least one skill token match.
-      2. Minimum experience years.
+    Experience gate uses FULL-TIME years only:
+      - For internal candidates: experience_years from DB is already full-time
+        only (written by bulk_create_resume_sections via total_experience_years()).
+      - For external scrapes: total_exp_years from LLM parse is full-time only
+        (total_experience_years() filters is_fulltime=False entries).
+      - Regex fallback (_infer_experience_years) used when DB value is NULL —
+        this is approximate but acceptable for external candidates without sections.
 
     Skill matching priority:
       1. skills_section_text (dedicated skills section) — tokenized and
@@ -233,26 +235,27 @@ def _passes_eligibility(
     tokens       = _normalize_skills(match_target)
     skills_lower = [s.lower().strip() for s in skills]
 
-    # ── ANY skill must match (changed from ALL) ───────────────────────────────
+    # ── ANY skill must match ──────────────────────────────────────────────────
     matched = [s for s in skills_lower if _skill_in_tokens(s, tokens)]
     if not matched:
         return False, f"No required skills found. Required any of: {', '.join(skills_lower)}"
 
-    # ── Experience check ──────────────────────────────────────────────────────
+    # ── Experience check (full-time only) ─────────────────────────────────────
     if experience_years is not None:
         exp    = experience_years
-        source = "DB column"
+        source = "DB (full-time only)"
     else:
         exp    = _infer_experience_years(parsed_text)
-        source = "regex fallback"
+        source = "regex fallback (approx)"
 
     if exp < min_exp:
-        return False, f"Experience {exp}y < required {min_exp}y ({source})"
+        return False, f"Full-time experience {exp}y < required {min_exp}y ({source})"
 
     missing = [s for s in skills_lower if not _skill_in_tokens(s, tokens)]
     return (
         True,
-        f"Skill match (any): {matched} | missing (ok): {missing} | exp: {exp}y ({source})",
+        f"Skill match (any): {matched} | missing (ok): {missing} | "
+        f"ft_exp: {exp}y ({source})",
     )
 
 
@@ -338,7 +341,13 @@ async def _fetch_resume_eligibility_data(
     resume_id: int,
 ) -> tuple[int | None, str | None]:
     """
-    Fetches both experience_years and skills section text in a single DB query.
+    Fetches experience_years (full-time only) and skills section text
+    in a single DB query.
+
+    experience_years stored in the DB is FULL-TIME only because:
+      - LLM sets ExperienceEntry.years=0 for non-full-time roles
+      - ResumeSectionEmbedder.total_experience_years() sums only is_fulltime=True entries
+      - bulk_create_resume_sections() writes that sum to the experience section row
 
     Returns:
       (experience_years, skills_section_text)
@@ -360,7 +369,7 @@ async def _fetch_resume_eligibility_data(
 
     for section_type, exp_years, content in rows:
         if section_type == "experience":
-            experience_years = exp_years
+            experience_years = exp_years   # full-time only (see docstring)
         elif section_type == "skills":
             skills_section_text = content
 
@@ -373,6 +382,7 @@ async def _fetch_experience_years(
 ) -> int | None:
     """
     Kept for backward compatibility — prefer _fetch_resume_eligibility_data.
+    Returns full-time experience years only (see _fetch_resume_eligibility_data).
     """
     from src.data.models.postgres.resume_section import ResumeSection
     result = await db.execute(
@@ -578,7 +588,7 @@ async def _save_sourcing_candidates(
 async def _search_internal(
     db: AsyncSession,
     job_id: int,
-    role: str,                  # ← NEW: needed for background check
+    role: str,
     skills: list[str],
     min_exp: int,
     limit: int,
@@ -631,9 +641,10 @@ async def _search_internal(
     ) -> tuple[bool, str]:
         """
         Two-stage gate:
-          1. Rule-based eligibility (any-skill + exp).
+          1. Rule-based eligibility (any-skill + full-time exp).
           2. Agent background check (role relevance).
         """
+        # experience_years here is full-time only (see _fetch_resume_eligibility_data)
         experience_years, skills_section_text = await _fetch_resume_eligibility_data(db, resume.id)
         passed, reason = _passes_eligibility(
             resume.parsed_text, skills, min_exp,
@@ -900,6 +911,8 @@ async def _scrape_and_ingest(
                     continue
 
                 # External scrape: any-skill gate on full text (no sections yet).
+                # experience_years=None → regex fallback used (full-time filter
+                # not yet available; LLM parse happens below after acceptance).
                 passed, reason = _passes_eligibility(
                     text, skills, min_exp,
                     experience_years=None,
@@ -926,6 +939,7 @@ async def _scrape_and_ingest(
                     name    = parsed.contact.name or "Unknown"
                     summary = await _agent.fit_summary(text, role, skills)
 
+                    # Full-time years only (is_fulltime=False entries excluded)
                     total_exp_years = ResumeSectionEmbedder.total_experience_years(parsed)
 
                     email = f"sourced_{sourcing_id}_{len(ingested)}@intellihire.internal"
@@ -953,7 +967,7 @@ async def _scrape_and_ingest(
                         db, resume_id=resume.id,
                         sections=section_texts,
                         section_embeddings=section_embeddings,
-                        experience_years=total_exp_years,
+                        experience_years=total_exp_years,  # full-time only
                     )
                     resume.embedding = json.dumps(full_embedding)
                     await db.commit()
@@ -972,7 +986,7 @@ async def _scrape_and_ingest(
                     })
                     log.info(
                         f"[DB] Saved cid={candidate.id} name='{name}' "
-                        f"exp_years={total_exp_years} "
+                        f"ft_exp_years={total_exp_years} "
                         f"progress={len(ingested)}/{needed}"
                     )
                 except Exception as exc:

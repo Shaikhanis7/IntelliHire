@@ -1,6 +1,5 @@
-// pages/JobDetailsPage.tsx
+// pages/JobDetailsPage.tsx — FULLY RESPONSIVE
 // Theme: Light blue professional — matches ApplicationsPage & MyApplicationsPage
-// (DM Sans + Fraunces · frosted glass cards · animated orb background · dot-grid)
 
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -23,9 +22,7 @@ import {
   useUpdateApplicationStatus,
 } from '../features/jobs/hooks/useJobDetails';
 
-/* ═══════════════════════════════════════════════════════════════
-   DESIGN TOKENS — identical to ApplicationsPage
-   ═══════════════════════════════════════════════════════════════ */
+/* ─── Design tokens ── */
 const C = {
   bg:           '#f0f5ff',
   surface:      '#f5f8ff',
@@ -78,11 +75,7 @@ const parseSkills = (s: string | string[] | null | undefined): string[] => {
 
 const scoreColor = (n: number) => n >= 80 ? C.teal : n >= 65 ? C.amber : C.danger;
 
-/* ═══════════════════════════════════════════════════════════════
-   SUB-COMPONENTS
-   ═══════════════════════════════════════════════════════════════ */
-
-/* ── Animated orb + dot-grid background ─────────────────────── */
+/* ─── Background ── */
 const BgPattern: React.FC = () => (
   <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
     <div style={{ position:'absolute', top:'-10%', right:'-5%', width:680, height:560, borderRadius:'50%', background:'radial-gradient(ellipse,rgba(79,125,255,0.13) 0%,rgba(79,125,255,0.04) 50%,transparent 75%)', filter:'blur(64px)', animation:'orbFloat1 18s ease-in-out infinite' }} />
@@ -100,21 +93,21 @@ const BgPattern: React.FC = () => (
   </div>
 );
 
-/* ── Frosted glass card ──────────────────────────────────────── */
+/* ─── Card ── */
 const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties; delay?: number }> = ({ children, style, delay = 0 }) => (
   <div style={{ background:'rgba(255,255,255,0.82)', backdropFilter:'blur(20px) saturate(1.5)', border:`1px solid ${C.border}`, borderRadius:18, boxShadow:C.shadow, animationName:'fadeUp', animationDuration:'0.5s', animationTimingFunction:'cubic-bezier(0.22,1,0.36,1)', animationDelay:`${delay}s`, animationFillMode:'both', ...style }}>
     {children}
   </div>
 );
 
-/* ── Skill pill ──────────────────────────────────────────────── */
+/* ─── Skill pill ── */
 const SkillPill: React.FC<{ children: string }> = ({ children }) => (
   <span style={{ display:'inline-flex', alignItems:'center', padding:'3px 10px', borderRadius:99, fontSize:11, fontWeight:600, background:C.blueDim, color:C.blue, border:`1px solid ${C.blue}20` }}>
     {children}
   </span>
 );
 
-/* ── Status badge ────────────────────────────────────────────── */
+/* ─── Status badge ── */
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   const m = STATUS_META[status] ?? STATUS_META.applied;
   return (
@@ -125,7 +118,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
   );
 };
 
-/* ── Score ring ──────────────────────────────────────────────── */
+/* ─── Score ring ── */
 const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 52 }) => {
   const v = Math.min(100, Math.max(0, Math.round(score)));
   const color = scoreColor(v);
@@ -142,20 +135,20 @@ const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 5
   );
 };
 
-/* ── Info row for sidebar ────────────────────────────────────── */
+/* ─── Info item ── */
 const InfoItem: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({ icon, label, value }) => (
   <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:10, background:C.surfaceDeep, border:`1px solid ${C.border}` }}>
     <div style={{ width:30, height:30, borderRadius:8, background:C.blueDim, border:`1px solid ${C.blue}22`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
       <span style={{ color:C.blue, display:'flex' }}>{icon}</span>
     </div>
-    <div>
+    <div style={{ minWidth:0 }}>
       <div style={{ fontSize:10, color:C.textFaint, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5, marginBottom:2 }}>{label}</div>
-      <div style={{ fontSize:13, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif" }}>{value}</div>
+      <div style={{ fontSize:13, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value}</div>
     </div>
   </div>
 );
 
-/* ── Sidebar action button ───────────────────────────────────── */
+/* ─── Sidebar button ── */
 const SideBtn: React.FC<{
   icon: React.ReactNode; label: string; onClick: () => void;
   loading?: boolean; color?: string; colorDim?: string; colorBorder?: string;
@@ -173,7 +166,7 @@ const SideBtn: React.FC<{
   );
 };
 
-/* ── Application row ─────────────────────────────────────────── */
+/* ─── Application row ── */
 const AppRow: React.FC<{
   app: Application; index: number;
   onStatus: (id: number, status: 'applied' | 'shortlisted' | 'rejected' | 'hired') => void;
@@ -191,14 +184,14 @@ const AppRow: React.FC<{
   return (
     <div
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ padding:'13px 16px', borderRadius:12, border:`1px solid ${hov ? C.borderHov : C.border}`, background: hov ? C.white : 'rgba(255,255,255,0.60)', transition:'all 0.18s', display:'flex', alignItems:'center', gap:13, flexWrap:'wrap', animationName:'fadeUp', animationDuration:'0.4s', animationTimingFunction:'cubic-bezier(0.22,1,0.36,1)', animationDelay:`${index * 0.05}s`, animationFillMode:'both', boxShadow: hov ? C.shadowHov : 'none' }}
+      className="jd-app-row"
+      style={{ padding:'13px 16px', borderRadius:12, border:`1px solid ${hov ? C.borderHov : C.border}`, background: hov ? C.white : 'rgba(255,255,255,0.60)', transition:'all 0.18s', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', animationName:'fadeUp', animationDuration:'0.4s', animationTimingFunction:'cubic-bezier(0.22,1,0.36,1)', animationDelay:`${index * 0.05}s`, animationFillMode:'both', boxShadow: hov ? C.shadowHov : 'none' }}
     >
-      {/* Avatar */}
-      <div style={{ width:38, height:38, borderRadius:10, flexShrink:0, background:`${aColor}12`, border:`1.5px solid ${aColor}28`, color:aColor, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, fontFamily:"'DM Sans', system-ui, sans-serif" }}>
+      <div style={{ width:38, height:38, borderRadius:10, flexShrink:0, background:`${aColor}12`, border:`1.5px solid ${aColor}28`, color:aColor, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700 }}>
         {initials}
       </div>
 
-      <div style={{ flex:1, minWidth:140 }}>
+      <div style={{ flex:1, minWidth:120 }}>
         <div style={{ fontSize:13.5, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif" }}>{name}</div>
         <div style={{ fontSize:11.5, color:C.textFaint, marginTop:2 }}>
           Applied {app.created_at ? formatDate(app.created_at) : 'recently'}
@@ -209,7 +202,7 @@ const AppRow: React.FC<{
 
       <StatusBadge status={app.status ?? 'applied'} />
 
-      <div style={{ display:'flex', gap:5 }}>
+      <div className="jd-app-actions">
         {app.source_url && (
           <a href={app.source_url} target="_blank" rel="noopener noreferrer"
             style={{ padding:'5px 10px', borderRadius:8, border:`1px solid ${C.border}`, background:C.white, fontSize:11.5, fontWeight:600, color:C.textMuted, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:4, transition:'all 0.15s', boxShadow:C.shadow }}
@@ -244,12 +237,12 @@ const AppRow: React.FC<{
   );
 };
 
-/* ── Toast notification ──────────────────────────────────────── */
+/* ─── Toast ── */
 const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => (
-  <div style={{ position:'fixed', bottom:24, right:24, zIndex:100, display:'flex', alignItems:'center', gap:10, padding:'12px 18px', borderRadius:12, background: type === 'success' ? C.tealDim : C.dangerDim, border:`1px solid ${type === 'success' ? C.tealBorder : C.dangerBorder}`, boxShadow:C.shadowHov, backdropFilter:'blur(20px)', animationName:'fadeUp', animationDuration:'0.3s', animationFillMode:'both', maxWidth:340 }}>
+  <div style={{ position:'fixed', bottom:24, right:16, left:16, zIndex:100, display:'flex', alignItems:'center', gap:10, padding:'12px 18px', borderRadius:12, background: type === 'success' ? C.tealDim : C.dangerDim, border:`1px solid ${type === 'success' ? C.tealBorder : C.dangerBorder}`, boxShadow:C.shadowHov, backdropFilter:'blur(20px)', animationName:'fadeUp', animationDuration:'0.3s', animationFillMode:'both', maxWidth:440, margin:'0 auto' }}>
     {type === 'success' ? <CheckCircle size={15} style={{ color:C.teal, flexShrink:0 }}/> : <AlertCircle size={15} style={{ color:C.danger, flexShrink:0 }}/>}
     <span style={{ fontSize:13, fontWeight:600, color: type === 'success' ? C.teal : C.danger, flex:1 }}>{message}</span>
-    <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.textFaint, padding:0, display:'flex' }}>
+    <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:C.textFaint, padding:0, display:'flex', flexShrink:0 }}>
       <XCircle size={13}/>
     </button>
   </div>
@@ -257,7 +250,7 @@ const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () 
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN PAGE
-   ═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const JobDetailsPage: React.FC = () => {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -275,7 +268,6 @@ const JobDetailsPage: React.FC = () => {
     setTimeout(() => setToast(null), 3500);
   };
 
-  /* Hooks */
   const { job, loading, error: jobError } = useJobDetails(jobId);
   const { apps, reload: reloadApps, updateLocalStatus } = useJobApplications(jobId, isRecruiter);
   const { apply, applying, success: applied, error: applyError, reset: resetApply } = useApplyForJob();
@@ -284,14 +276,12 @@ const JobDetailsPage: React.FC = () => {
     updateLocalStatus(appId, status);
   });
 
-  /* Show feedback toasts */
   React.useEffect(() => { if (applied) { showToast('Application submitted successfully!'); resetApply(); } }, [applied]);
   React.useEffect(() => { if (applyError) showToast(applyError, 'error'); }, [applyError]);
   React.useEffect(() => { if (shortlistResult) showToast(shortlistResult, shortlistResult.includes('failed') ? 'error' : 'success'); }, [shortlistResult]);
 
   const skills = parseSkills(job?.skills_required);
 
-  /* ── Loading ── */
   if (loading) return (
     <div style={{ display:'flex', justifyContent:'center', alignItems:'center', minHeight:'100vh', background:C.bg }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -299,7 +289,6 @@ const JobDetailsPage: React.FC = () => {
     </div>
   );
 
-  /* ── Not found ── */
   if (!job) return (
     <div style={{ fontFamily:"'DM Sans', system-ui, sans-serif", background:C.bg, minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
       <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -316,7 +305,7 @@ const JobDetailsPage: React.FC = () => {
   );
 
   return (
-    <div style={{ fontFamily:"'DM Sans', system-ui, sans-serif", background:C.bg, padding:24, position:'relative', overflow:'hidden', minHeight:'100vh' }}>
+    <div style={{ fontFamily:"'DM Sans', system-ui, sans-serif", background:C.bg, padding:'clamp(12px,3vw,24px)', position:'relative', overflow:'hidden', minHeight:'100vh' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&display=swap');
         @keyframes fadeUp    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
@@ -329,15 +318,83 @@ const JobDetailsPage: React.FC = () => {
         ::selection { background:rgba(79,125,255,0.18); color:#0d1b3e; }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-thumb { background:rgba(79,125,255,0.18); border-radius:99px; }
-        .jd-grid { display:grid; grid-template-columns:1fr 290px; gap:16px; align-items:start; }
-        @media(max-width:900px) { .jd-grid { grid-template-columns:1fr; } }
+
+        /* ── Main grid ── */
+        .jd-grid {
+          display:grid;
+          grid-template-columns:1fr 280px;
+          gap:16px;
+          align-items:start;
+        }
+
+        /* ── Hero card inner ── */
+        .jd-hero-inner {
+          display:flex;
+          align-items:flex-start;
+          gap:18px;
+          flex-wrap:wrap;
+        }
+
+        .jd-hero-title-row {
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+          margin-bottom:9px;
+        }
+
+        .jd-meta-row {
+          display:flex;
+          gap:14px;
+          flex-wrap:wrap;
+        }
+
+        /* ── AppRow actions ── */
+        .jd-app-row { }
+        .jd-app-actions {
+          display:flex;
+          gap:6px;
+          flex-wrap:wrap;
+          align-items:center;
+          margin-left:auto;
+        }
+
+        /* ── Tabs ── */
+        .jd-tabs {
+          display:flex;
+          gap:6px;
+          flex-wrap:wrap;
+        }
+
+        /* ── Sidebar ── */
+        .jd-sidebar-info-grid {
+          display:flex;
+          flex-direction:column;
+          gap:7px;
+        }
+
+        /* ── Tablet ── */
+        @media(max-width:900px) {
+          .jd-grid { grid-template-columns:1fr; }
+        }
+
+        /* ── Mobile ── */
+        @media(max-width:600px) {
+          .jd-hero-inner { gap:12px; }
+          .jd-app-actions { margin-left:0; width:100%; justify-content:flex-end; }
+          .jd-app-row { align-items:flex-start; }
+        }
+
+        @media(max-width:440px) {
+          .jd-hero-title-row h1 { font-size:18px !important; }
+        }
       `}</style>
 
       <BgPattern />
 
       <div style={{ position:'relative', zIndex:2 }}>
 
-        {/* ── Back button ── */}
+        {/* Back button */}
         <button onClick={() => navigate('/jobs')}
           style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'7px 13px', borderRadius:9, marginBottom:20, border:`1px solid ${C.border}`, background:C.white, fontSize:12.5, fontWeight:600, color:C.textMuted, cursor:'pointer', fontFamily:'inherit', transition:'all 0.16s', animationName:'fadeUp', animationDuration:'0.35s', animationFillMode:'both', boxShadow:C.shadow }}
           onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.borderFocus; b.style.color = C.blue; b.style.boxShadow = C.shadowBlue; }}
@@ -345,31 +402,29 @@ const JobDetailsPage: React.FC = () => {
           <ArrowLeft size={13}/> Back to Jobs
         </button>
 
-        {/* ── Hero card ── */}
+        {/* Hero card */}
         <Card style={{ marginBottom:16, overflow:'hidden' }} delay={0.05}>
-          {/* Active/closed stripe */}
           <div style={{ height:3, background: job.is_active ? `linear-gradient(90deg,${C.blue},${C.teal})` : `linear-gradient(90deg,${C.textFaint},transparent)` }} />
-          <div style={{ padding:'22px 24px' }}>
-            <div style={{ display:'flex', alignItems:'flex-start', gap:18, flexWrap:'wrap' }}>
-              {/* Icon */}
-              <div style={{ width:56, height:56, borderRadius:16, flexShrink:0, background:C.blueDim, border:`1.5px solid ${C.blue}28`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:C.shadowBlue }}>
-                <Briefcase size={24} style={{ color:C.blue }}/>
+          <div style={{ padding:'18px 20px' }}>
+            <div className="jd-hero-inner">
+              <div style={{ width:52, height:52, borderRadius:16, flexShrink:0, background:C.blueDim, border:`1.5px solid ${C.blue}28`, display:'flex', alignItems:'center', justifyContent:'center', boxShadow:C.shadowBlue }}>
+                <Briefcase size={22} style={{ color:C.blue }}/>
               </div>
 
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:9 }}>
-                  <h1 style={{ fontSize:22, fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.4px', fontFamily:"'Fraunces', Georgia, serif" }}>{job.title}</h1>
-                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:99, fontSize:11, fontWeight:700, background: job.is_active ? C.tealDim : C.surfaceDeep, color: job.is_active ? C.teal : C.textFaint, border:`1px solid ${job.is_active ? C.tealBorder : C.border}` }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div className="jd-hero-title-row">
+                  <h1 style={{ fontSize:'clamp(17px,3.5vw,22px)', fontWeight:800, color:C.text, margin:0, letterSpacing:'-0.4px', fontFamily:"'Fraunces', Georgia, serif", wordBreak:'break-word' }}>{job.title}</h1>
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'3px 10px', borderRadius:99, fontSize:11, fontWeight:700, background: job.is_active ? C.tealDim : C.surfaceDeep, color: job.is_active ? C.teal : C.textFaint, border:`1px solid ${job.is_active ? C.tealBorder : C.border}`, flexShrink:0 }}>
                     <span style={{ width:5, height:5, borderRadius:'50%', background: job.is_active ? C.teal : C.textFaint, animation: job.is_active ? 'pulseGlow 2s ease infinite' : 'none' }}/>
                     {job.is_active ? 'Active' : 'Closed'}
                   </span>
                 </div>
-                <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+                <div className="jd-meta-row">
                   {[
-                    { icon:<TrendingUp size={11}/>, text:`${job.experience_required}+ yrs experience` },
+                    { icon:<TrendingUp size={11}/>, text:`${job.experience_required}+ yrs exp` },
                     ...(job.location ? [{ icon:<MapPin size={11}/>, text:job.location }] : []),
                     { icon:<Calendar size={11}/>, text:`Posted ${job.created_at ? formatDate(job.created_at) : 'recently'}` },
-                    { icon:<Users size={11}/>, text:`${apps.length} application${apps.length !== 1 ? 's' : ''}` },
+                    { icon:<Users size={11}/>, text:`${apps.length} applicant${apps.length !== 1 ? 's' : ''}` },
                   ].map((m, i) => (
                     <span key={i} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:12, color:C.textMuted, fontWeight:500 }}>
                       <span style={{ color:C.textFaint }}>{m.icon}</span>{m.text}
@@ -378,10 +433,10 @@ const JobDetailsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Apply button — candidate only */}
+              {/* Apply button */}
               {isCandidate && job.is_active && (
                 <button onClick={() => apply(jobId!)} disabled={applying}
-                  style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'11px 22px', borderRadius:11, background: applying ? C.surfaceDeep : C.gradBlue, color: applying ? C.textMuted : C.white, border:'none', cursor: applying ? 'not-allowed' : 'pointer', fontSize:14, fontWeight:700, boxShadow: applying ? 'none' : C.shadowBlue, fontFamily:'inherit', transition:'opacity 0.18s', flexShrink:0 }}
+                  style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:11, background: applying ? C.surfaceDeep : C.gradBlue, color: applying ? C.textMuted : C.white, border:'none', cursor: applying ? 'not-allowed' : 'pointer', fontSize:13.5, fontWeight:700, boxShadow: applying ? 'none' : C.shadowBlue, fontFamily:'inherit', transition:'opacity 0.18s', flexShrink:0 }}
                   onMouseEnter={e => { if (!applying) (e.currentTarget as HTMLButtonElement).style.opacity = '0.85'; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}>
                   {applying ? <><Loader2 size={14} style={{ animation:'spin 1s linear infinite' }}/> Applying…</> : <><UserCheck size={14}/> Apply Now</>}
@@ -391,7 +446,7 @@ const JobDetailsPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* ── Main grid ── */}
+        {/* Main grid */}
         <div className="jd-grid">
 
           {/* Left column */}
@@ -399,7 +454,7 @@ const JobDetailsPage: React.FC = () => {
 
             {/* Tabs — recruiter only */}
             {isRecruiter && (
-              <div style={{ display:'flex', gap:6, animationName:'fadeUp', animationDuration:'0.4s', animationDelay:'0.1s', animationFillMode:'both' }}>
+              <div className="jd-tabs" style={{ animationName:'fadeUp', animationDuration:'0.4s', animationDelay:'0.1s', animationFillMode:'both' }}>
                 {(['description', 'applications'] as const).map(tab => {
                   const active = activeTab === tab;
                   return (
@@ -419,8 +474,8 @@ const JobDetailsPage: React.FC = () => {
                   <div style={{ padding:'16px 20px 13px', borderBottom:`1px solid ${C.border}` }}>
                     <span style={{ fontSize:14, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif" }}>Job Description</span>
                   </div>
-                  <div style={{ padding:'18px 22px' }}>
-                    <p style={{ fontSize:13.5, color:C.textMuted, lineHeight:1.85, margin:0, whiteSpace:'pre-wrap', fontFamily:"'DM Sans', system-ui, sans-serif" }}>
+                  <div style={{ padding:'18px 20px' }}>
+                    <p style={{ fontSize:13.5, color:C.textMuted, lineHeight:1.85, margin:0, whiteSpace:'pre-wrap', wordBreak:'break-word', fontFamily:"'DM Sans', system-ui, sans-serif" }}>
                       {job.description || 'No description provided.'}
                     </p>
                   </div>
@@ -446,7 +501,7 @@ const JobDetailsPage: React.FC = () => {
             {/* Applications tab — recruiter only */}
             {isRecruiter && activeTab === 'applications' && (
               <Card delay={0.12}>
-                <div style={{ padding:'16px 20px 13px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
+                <div style={{ padding:'14px 18px 12px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
                   <span style={{ fontSize:14, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif" }}>Applications ({apps.length})</span>
                   <div style={{ display:'flex', gap:5, alignItems:'center', flexWrap:'wrap' }}>
                     {(['applied','scored','shortlisted','hired','rejected'] as const).map(s => {
@@ -491,12 +546,11 @@ const JobDetailsPage: React.FC = () => {
           {/* Right sidebar */}
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-            {/* Job details */}
             <Card delay={0.14}>
               <div style={{ padding:'16px 20px 13px', borderBottom:`1px solid ${C.border}` }}>
                 <span style={{ fontSize:14, fontWeight:700, color:C.text, fontFamily:"'Fraunces', Georgia, serif" }}>Job Details</span>
               </div>
-              <div style={{ padding:'13px 14px', display:'flex', flexDirection:'column', gap:7 }}>
+              <div className="jd-sidebar-info-grid" style={{ padding:'13px 14px' }}>
                 <InfoItem icon={<TrendingUp size={12}/>} label="Experience" value={`${job.experience_required}+ years`} />
                 {job.location && <InfoItem icon={<MapPin size={12}/>} label="Location" value={job.location} />}
                 <InfoItem icon={<Calendar size={12}/>} label="Posted" value={job.created_at ? formatDate(job.created_at) : 'N/A'} />
@@ -504,7 +558,6 @@ const JobDetailsPage: React.FC = () => {
               </div>
             </Card>
 
-            {/* Recruiter actions */}
             {isRecruiter && (
               <Card delay={0.2}>
                 <div style={{ padding:'16px 20px 13px', borderBottom:`1px solid ${C.border}` }}>
@@ -513,7 +566,7 @@ const JobDetailsPage: React.FC = () => {
                 <div style={{ padding:'13px 14px', display:'flex', flexDirection:'column', gap:7 }}>
                   <SideBtn icon={<Edit2 size={13}/>} label="Edit Job" onClick={() => navigate(`/jobs/${job.id}/edit`)} />
                   <SideBtn
-                    icon={<Star size={13}/>} label="Auto-Shortlist Candidates"
+                    icon={<Star size={13}/>} label="Auto-Shortlist"
                     onClick={() => shortlist(job.id)}
                     loading={shortlisting}
                     color={C.amber} colorDim={C.amberDim} colorBorder={C.amberBorder}
@@ -527,7 +580,6 @@ const JobDetailsPage: React.FC = () => {
               </Card>
             )}
 
-            {/* AI badge */}
             <div style={{ borderRadius:16, padding:'16px 18px', animationName:'fadeUp', animationDuration:'0.4s', animationDelay:'0.26s', animationFillMode:'both', background:`linear-gradient(145deg, ${C.blueDim} 0%, ${C.tealDim} 100%)`, border:`1px solid ${C.borderMid}`, backdropFilter:'blur(16px)', boxShadow:C.shadow }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:7 }}>
                 <Sparkles size={13} style={{ color:C.blue }}/>
@@ -541,7 +593,6 @@ const JobDetailsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );

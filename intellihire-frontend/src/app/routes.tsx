@@ -24,9 +24,10 @@ const RoleDashboard: React.FC = () => {
   const { user } = useSelector((s: RootState) => s.auth);
   if (user?.role === 'candidate') return <CandidateDashboard />;
   if (user?.role === 'recruiter') return <DashboardPage />;
-  if (user?.role === 'admin')     return <DashboardPage />;  // admins see recruiter dashboard
+  if (user?.role === 'admin')     return <DashboardPage />;
   return <Navigate to="/" replace />;
 };
+
 /* ── AuthGuard — redirect already-logged-in users away from /auth ────────── */
 const AuthGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isInitialized } = useSelector((s: RootState) => s.auth);
@@ -49,18 +50,16 @@ export const router = createBrowserRouter([
   },
 
   // ── Protected ────────────────────────────────────────────────────────────
-  // IMPORTANT: redirectTo="/auth" here prevents the infinite loop.
-  // Without it, unauthenticated users → "/" → ProtectedRoute → "/" → ...
   {
     element: <ProtectedRoute redirectTo="/auth" />,
     children: [
       {
         element: <DashboardLayout />,
         children: [
-          // /dashboard is the entry point for all authenticated users
+          // /dashboard — entry point for all authenticated users
           { path: 'dashboard', element: <RoleDashboard /> },
 
-          // Shared routes
+          // Shared routes (all authenticated roles)
           { path: 'jobs',     element: <JobPostingsPage /> },
           { path: 'jobs/:id', element: <JobDetailsPage /> },
 
@@ -74,11 +73,11 @@ export const router = createBrowserRouter([
             ),
           },
 
-          // Recruiter-only
+          // Recruiter + Admin
           {
             path: 'resumes',
             element: (
-              <ProtectedRoute role="recruiter" unauthorizedRedirect="/dashboard">
+              <ProtectedRoute role={['recruiter', 'admin']} unauthorizedRedirect="/dashboard">
                 <ResumeSearchPage />
               </ProtectedRoute>
             ),
@@ -86,7 +85,7 @@ export const router = createBrowserRouter([
           {
             path: 'applications',
             element: (
-              <ProtectedRoute role="recruiter" unauthorizedRedirect="/dashboard">
+              <ProtectedRoute role={['recruiter', 'admin']} unauthorizedRedirect="/dashboard">
                 <ApplicationsPage />
               </ProtectedRoute>
             ),
@@ -94,7 +93,7 @@ export const router = createBrowserRouter([
           {
             path: 'sourcing',
             element: (
-              <ProtectedRoute role="recruiter" unauthorizedRedirect="/dashboard">
+              <ProtectedRoute role={['recruiter', 'admin']} unauthorizedRedirect="/dashboard">
                 <SourcingPage />
               </ProtectedRoute>
             ),
@@ -102,7 +101,7 @@ export const router = createBrowserRouter([
           {
             path: 'company',
             element: (
-              <ProtectedRoute role="recruiter" unauthorizedRedirect="/dashboard">
+              <ProtectedRoute role={['recruiter', 'admin']} unauthorizedRedirect="/dashboard">
                 <CompanyProfilePage />
               </ProtectedRoute>
             ),

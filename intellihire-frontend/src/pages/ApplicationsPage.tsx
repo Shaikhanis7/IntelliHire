@@ -1,13 +1,6 @@
-/**
- * pages/ApplicationsPage.tsx — RECRUITER ONLY
- * ─────────────────────────────────────────────
- * Theme : SourcingPage light-blue professional
- *         (DM Sans + Fraunces · frosted glass cards ·
- *          animated orb background · dot-grid overlay)
- *
- * Imports hooks / service / types from feature folder.
- * All UI sub-components live below the imports section.
- */
+// pages/ApplicationsPage.tsx — RECRUITER ONLY · FULLY RESPONSIVE
+// Theme: SourcingPage light-blue professional
+// (DM Sans + Fraunces · frosted glass cards · animated orb background · dot-grid overlay)
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useSelector } from 'react-redux';
@@ -30,9 +23,7 @@ import {
   useRecruiterFilter,
 } from '../features/application/hooks/useRecruiterApplications';
 
-/* ═══════════════════════════════════════════════════════════════
-   DESIGN TOKENS  — identical to SourcingPage
-   ═══════════════════════════════════════════════════════════════ */
+/* ─── Design tokens ── */
 const C = {
   bg:           '#f0f5ff',
   surface:      '#f5f8ff',
@@ -92,9 +83,7 @@ const parseSkills = (s: string | string[] | null | undefined): string[] => {
 
 const scoreColor = (n: number) => n >= 80 ? C.teal : n >= 65 ? C.amber : C.danger;
 
-/* ═══════════════════════════════════════════════════════════════
-   BACKGROUND
-   ═══════════════════════════════════════════════════════════════ */
+/* ─── Background ── */
 const BgPattern: React.FC = () => (
   <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
     <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: 680, height: 560, borderRadius: '50%', background: 'radial-gradient(ellipse, rgba(79,125,255,0.13) 0%, rgba(79,125,255,0.04) 50%, transparent 75%)', filter: 'blur(64px)', animation: 'orbFloat1 18s ease-in-out infinite' }} />
@@ -112,47 +101,47 @@ const BgPattern: React.FC = () => (
   </div>
 );
 
-/* ── Card ────────────────────────────────────────────────────── */
+/* ─── Card ── */
 const Card: React.FC<{ children: React.ReactNode; style?: React.CSSProperties; delay?: number }> = ({ children, style, delay = 0 }) => (
   <div style={{ background: 'rgba(255,255,255,0.82)', backdropFilter: 'blur(20px) saturate(1.5)', border: `1px solid ${C.border}`, borderRadius: 18, boxShadow: C.shadow, animationName: 'fadeUp', animationDuration: '0.5s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationDelay: `${delay}s`, animationFillMode: 'both', ...style }}>
     {children}
   </div>
 );
 
-/* ── Stat card ───────────────────────────────────────────────── */
+/* ─── Stat card ── */
 const StatCard: React.FC<{ label: string; value: string | number; icon: React.ReactNode; color: string; delay?: number }> = ({ label, value, icon, color, delay = 0 }) => {
   const [hov, setHov] = useState(false);
   return (
-    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ background: hov ? C.white : 'rgba(255,255,255,0.80)', backdropFilter: 'blur(16px)', border: `1px solid ${hov ? `${color}35` : C.border}`, borderRadius: 16, padding: '16px 18px', boxShadow: hov ? `0 8px 32px ${color}18` : C.shadow, transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)', transform: hov ? 'translateY(-3px)' : 'none', cursor: 'default', animationName: 'fadeUp', animationDuration: '0.5s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationDelay: `${delay}s`, animationFillMode: 'both' }}>
-      <div style={{ width: 36, height: 36, borderRadius: 10, marginBottom: 12, background: `${color}12`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition: 'box-shadow 0.25s' }}>
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{ background: hov ? C.white : 'rgba(255,255,255,0.80)', backdropFilter: 'blur(16px)', border: `1px solid ${hov ? `${color}35` : C.border}`, borderRadius: 16, padding: '14px 16px', boxShadow: hov ? `0 8px 32px ${color}18` : C.shadow, transition: 'all 0.25s cubic-bezier(0.22,1,0.36,1)', transform: hov ? 'translateY(-3px)' : 'none', cursor: 'default', animationName: 'fadeUp', animationDuration: '0.5s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationDelay: `${delay}s`, animationFillMode: 'both' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 10, marginBottom: 10, background: `${color}12`, border: `1px solid ${color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: hov ? `0 0 16px ${color}30` : 'none', transition: 'box-shadow 0.25s' }}>
         <span style={{ color, display: 'flex' }}>{icon}</span>
       </div>
-      <div style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: '-1px', lineHeight: 1, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
-      <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{label}</div>
+      <div style={{ fontSize: 'clamp(18px,3.5vw,24px)', fontWeight: 800, color: C.text, letterSpacing: '-1px', lineHeight: 1, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
+      <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{label}</div>
     </div>
   );
 };
 
-/* ── Status badge ────────────────────────────────────────────── */
+/* ─── Status badge ── */
 const StatusBadge: React.FC<{ status: AppStatus }> = ({ status }) => {
   const m = STATUS_META[status] ?? STATUS_META.applied;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, background: m.bg, color: m.color, border: `1px solid ${m.border}`, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 99, background: m.bg, color: m.color, border: `1px solid ${m.border}`, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2, fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: 'nowrap' }}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
       {m.label}
     </span>
   );
 };
 
-/* ── Sourcing badge ──────────────────────────────────────────── */
+/* ─── Sourcing badge ── */
 const SourcingBadge: React.FC<{ rank: number }> = ({ rank }) => (
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, background: C.indigoDim, border: `1px solid ${C.indigo}25`, fontSize: 10.5, fontWeight: 700, color: C.indigo, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 6, background: C.indigoDim, border: `1px solid ${C.indigo}25`, fontSize: 10.5, fontWeight: 700, color: C.indigo, fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: 'nowrap' }}>
     <Layers size={9} /> Sourced #{rank}
   </span>
 );
 
-/* ── Score ring ──────────────────────────────────────────────── */
-const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 62 }) => {
+/* ─── Score ring ── */
+const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 58 }) => {
   const v = Math.min(100, Math.max(0, Math.round(score)));
   const color = scoreColor(v);
   const r = size / 2 - 5, circ = 2 * Math.PI * r, dash = (v / 100) * circ;
@@ -168,19 +157,19 @@ const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 6
   );
 };
 
-/* ── Pending score ───────────────────────────────────────────── */
+/* ─── Pending score ── */
 const PendingScore: React.FC = () => (
-  <div style={{ width: 62, height: 62, borderRadius: '50%', flexShrink: 0, background: C.surfaceDeep, border: `1.5px dashed ${C.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+  <div style={{ width: 58, height: 58, borderRadius: '50%', flexShrink: 0, background: C.surfaceDeep, border: `1.5px dashed ${C.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
     <Clock size={14} style={{ color: C.textFaint }} />
     <span style={{ fontSize: 9, color: C.textFaint, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', fontFamily: "'DM Sans', system-ui, sans-serif" }}>pending</span>
   </div>
 );
 
-/* ── Score bar ───────────────────────────────────────────────── */
+/* ─── Score bar ── */
 const ScoreBar: React.FC<{ value: number; label: string; color: string }> = ({ value, label, color }) => {
   const v = Math.min(100, Math.max(0, Math.round(value)));
   return (
-    <div style={{ flex: 1 }}>
+    <div style={{ flex: 1, minWidth: 80 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.textMuted, marginBottom: 4, fontWeight: 600, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <span>{label}</span><span style={{ color, fontWeight: 700 }}>{v}%</span>
       </div>
@@ -191,15 +180,15 @@ const ScoreBar: React.FC<{ value: number; label: string; color: string }> = ({ v
   );
 };
 
-/* ── Action button ───────────────────────────────────────────── */
+/* ─── Action button ── */
 const ActionBtn: React.FC<{ onClick: () => void; disabled: boolean; bg: string; color: string; border?: string; shadow?: string; children: React.ReactNode }> = ({ onClick, disabled, bg, color, border, shadow, children }) => (
-  <button onClick={onClick} disabled={disabled} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 13px', borderRadius: 9, background: bg, color, border: border ? `1px solid ${border}` : 'none', fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", opacity: disabled ? .55 : 1, transition: 'all 0.15s', boxShadow: shadow ?? 'none' }}
+  <button onClick={onClick} disabled={disabled} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, background: bg, color, border: border ? `1px solid ${border}` : 'none', fontSize: 12, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", opacity: disabled ? .55 : 1, transition: 'all 0.15s', boxShadow: shadow ?? 'none', whiteSpace: 'nowrap' }}
     onMouseEnter={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.opacity = '0.82'; }}
     onMouseLeave={e => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
   >{children}</button>
 );
 
-/* ── Job selector ────────────────────────────────────────────── */
+/* ─── Job selector ── */
 const JobSelector: React.FC<{ jobs: Job[]; selected: Job | null; loading: boolean; onSelect: (j: Job | null) => void }> = ({ jobs, selected, loading, onSelect }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -219,16 +208,16 @@ const JobSelector: React.FC<{ jobs: Job[]; selected: Job | null; loading: boolea
   const display = open ? query : selected ? `#${selected.id} · ${selected.title}` : '';
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', minWidth: 280 }}>
+    <div ref={containerRef} className="rapp-job-selector">
       <div onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 0); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', border: `1.5px solid ${focused ? C.borderFocus : C.border}`, borderRadius: 11, background: C.white, cursor: 'text', boxShadow: focused ? `0 0 0 3px ${C.blue}14` : C.shadow, transition: 'all .18s' }}>
         <Search size={13} style={{ color: C.textFaint, flexShrink: 0 }} />
-        <input ref={inputRef} value={display} placeholder={loading ? 'Loading jobs…' : 'Search #ID, title, skill…'} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => { setFocused(true); setOpen(true); setQuery(''); }} onBlur={() => setFocused(false)} style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: C.text, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }} />
-        {selected && !open && <button onClick={e => { e.stopPropagation(); onSelect(null); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex', padding: 0 }}><X size={12} /></button>}
+        <input ref={inputRef} value={display} placeholder={loading ? 'Loading jobs…' : 'Search #ID, title, skill…'} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => { setFocused(true); setOpen(true); setQuery(''); }} onBlur={() => setFocused(false)} style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 13, color: C.text, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif", minWidth: 0 }} />
+        {selected && !open && <button onClick={e => { e.stopPropagation(); onSelect(null); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, display: 'flex', padding: 0, flexShrink: 0 }}><X size={12} /></button>}
         <ChevronDown size={13} style={{ color: C.textFaint, flexShrink: 0, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
       </div>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'rgba(255,255,255,0.98)', backdropFilter: 'blur(20px)', border: `1px solid ${C.borderMid}`, borderRadius: 14, boxShadow: C.shadowHov, maxHeight: 320, overflowY: 'auto', animationName: 'dropIn', animationDuration: '0.15s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'rgba(255,255,255,0.98)', backdropFilter: 'blur(20px)', border: `1px solid ${C.borderMid}`, borderRadius: 14, boxShadow: C.shadowHov, maxHeight: 280, overflowY: 'auto', animationName: 'dropIn', animationDuration: '0.15s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
           {filtered.length === 0
             ? <div style={{ padding: 20, textAlign: 'center', fontSize: 13, color: C.textFaint, fontFamily: "'DM Sans', system-ui, sans-serif" }}>No jobs match "{query}"</div>
             : filtered.map(j => {
@@ -239,12 +228,12 @@ const JobSelector: React.FC<{ jobs: Job[]; selected: Job | null; loading: boolea
                 <div key={j.id} onMouseDown={e => { e.preventDefault(); handleSelect(j); }} style={{ padding: '10px 14px', cursor: 'pointer', background: isSel ? C.blueDim : 'transparent', borderLeft: `3px solid ${isSel ? C.blue : 'transparent'}`, transition: 'all .12s' }}
                   onMouseEnter={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = 'rgba(79,125,255,0.05)'; }}
                   onMouseLeave={e => { if (!isSel) (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ padding: '1px 7px', borderRadius: 6, background: isSel ? C.blue : C.surfaceDeep, color: isSel ? C.white : C.textMuted, fontSize: 10, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }}>#{j.id}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: isSel ? C.blue : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Sans', system-ui, sans-serif" }}>{j.title}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                    <span style={{ padding: '1px 7px', borderRadius: 6, background: isSel ? C.blue : C.surfaceDeep, color: isSel ? C.white : C.textMuted, fontSize: 10, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif", flexShrink: 0 }}>#{j.id}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: isSel ? C.blue : C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Sans', system-ui, sans-serif", flex: 1, minWidth: 0 }}>{j.title}</span>
                     {isSel && <CheckCircle size={13} style={{ color: C.blue, marginLeft: 'auto', flexShrink: 0 }} />}
                   </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: skills.length ? 6 : 0 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: skills.length ? 6 : 0, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{j.experience_required}y+ exp</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: j.is_active ? C.teal : C.textFaint, fontWeight: 600, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
                       <span style={{ width: 5, height: 5, borderRadius: '50%', background: j.is_active ? C.teal : C.textFaint }} />{j.is_active ? 'Active' : 'Closed'}
@@ -265,7 +254,7 @@ const JobSelector: React.FC<{ jobs: Job[]; selected: Job | null; loading: boolea
   );
 };
 
-/* ── Candidate card ──────────────────────────────────────────── */
+/* ─── Candidate card ── */
 const CandidateCard: React.FC<{ app: Application; rank: number; onStatus: (id: number, status: AppStatus) => void; statusLoading: number | null }> = ({ app, rank, onStatus, statusLoading }) => {
   const [expanded, setExpanded] = useState(false);
   const [localLoading, setLocalLoading] = useState<AppStatus | null>(null);
@@ -287,102 +276,108 @@ const CandidateCard: React.FC<{ app: Application; rank: number; onStatus: (id: n
       style={{ background: hovered ? C.white : 'rgba(255,255,255,0.82)', backdropFilter: 'blur(18px)', border: `1px solid ${hovered ? C.borderHov : C.border}`, borderRadius: 18, overflow: 'hidden', boxShadow: hovered ? C.shadowHov : C.shadow, transition: 'all 0.28s cubic-bezier(0.22,1,0.36,1)', transform: hovered ? 'translateY(-3px)' : 'none', position: 'relative' }}>
       {isTop && <div style={{ height: 3, background: `linear-gradient(90deg, ${C.blue}, ${C.teal})` }} />}
 
-      <div style={{ padding: '18px 22px', display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-        {/* Rank */}
-        <div style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, marginTop: 18, background: isTop ? C.blueDim : C.surfaceDeep, border: `1px solid ${isTop ? `${C.blue}35` : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: isTop ? C.blue : C.textFaint, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-          {isTop ? '★' : rank}
-        </div>
+      <div style={{ padding: '16px 18px' }}>
+        {/* Top row: rank + avatar + info + score + actions */}
+        <div className="rapp-card-top">
 
-        {/* Avatar */}
-        <div style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: `${aColor}12`, border: `1.5px solid ${aColor}28`, color: aColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: hovered ? `0 0 18px ${aColor}28` : 'none', transition: 'box-shadow 0.25s' }}>
-          {initials}
-        </div>
+          {/* Left: rank + avatar + info */}
+          <div className="rapp-card-left">
+            <div style={{ width: 28, height: 28, borderRadius: 9, flexShrink: 0, background: isTop ? C.blueDim : C.surfaceDeep, border: `1px solid ${isTop ? `${C.blue}35` : C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: isTop ? C.blue : C.textFaint, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+              {isTop ? '★' : rank}
+            </div>
 
-        {/* Info */}
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: '-0.2px', fontFamily: "'Fraunces', Georgia, serif" }}>{name}</span>
-            <StatusBadge status={status} />
-            {app.sourcing_rank != null && <SourcingBadge rank={app.sourcing_rank} />}
-            {isTop && <span style={{ padding: '2px 9px', borderRadius: 99, fontSize: 10, fontWeight: 700, background: C.blueDim, color: C.blue, border: `1px solid ${C.blue}22`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>TOP {rank}</span>}
+            <div style={{ width: 44, height: 44, borderRadius: 13, flexShrink: 0, background: `${aColor}12`, border: `1.5px solid ${aColor}28`, color: aColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: hovered ? `0 0 18px ${aColor}28` : 'none', transition: 'box-shadow 0.25s' }}>
+              {initials}
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="rapp-name-row">
+                <span style={{ fontSize: 'clamp(13px,2.5vw,15px)', fontWeight: 700, color: C.text, letterSpacing: '-0.2px', fontFamily: "'Fraunces', Georgia, serif", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <StatusBadge status={status} />
+                  {app.sourcing_rank != null && <SourcingBadge rank={app.sourcing_rank} />}
+                  {isTop && <span style={{ padding: '2px 9px', borderRadius: 99, fontSize: 10, fontWeight: 700, background: C.blueDim, color: C.blue, border: `1px solid ${C.blue}22`, fontFamily: "'DM Sans', system-ui, sans-serif", whiteSpace: 'nowrap' }}>TOP {rank}</span>}
+                </div>
+              </div>
+
+              {app.fit_summary && <p style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.65, margin: '6px 0 8px', maxWidth: 440, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{app.fit_summary}</p>}
+
+              <div className="rapp-meta-row">
+                {app.candidate?.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif', overflow:'hidden', textOverflow:'ellipsis" }}><Mail size={10} style={{ color: C.textFaint, flexShrink: 0 }}/>{app.candidate.email}</span>}
+                {app.candidate?.location && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}><MapPin size={10} style={{ color: C.textFaint, flexShrink: 0 }}/>{app.candidate.location}</span>}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}><Calendar size={10} style={{ color: C.textFaint }}/>{fmt(app.created_at)}</span>
+              </div>
+
+              {skills.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                  {skills.slice(0, 4).map((s, i) => <span key={i} style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: C.blueDim, color: C.blue, border: `1px solid ${C.blue}20`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{s}</span>)}
+                  {skills.length > 4 && <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: C.surfaceDeep, color: C.textFaint, fontFamily: "'DM Sans', system-ui, sans-serif" }}>+{skills.length - 4}</span>}
+                </div>
+              )}
+
+              {hasScore && (
+                <div className="rapp-score-bars">
+                  <ScoreBar value={app.semantic_score ?? 0} label="Semantic" color={C.blue} />
+                  <ScoreBar value={app.rule_score ?? 0}     label="Rule"     color={C.teal} />
+                </div>
+              )}
+            </div>
           </div>
 
-          {app.fit_summary && <p style={{ fontSize: 12.5, color: C.textMuted, lineHeight: 1.7, margin: '0 0 10px', maxWidth: 480, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{app.fit_summary}</p>}
+          {/* Right: score ring + actions */}
+          <div className="rapp-card-right">
+            {hasScore ? <ScoreRing score={app.final_score!} /> : <PendingScore />}
 
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 9 }}>
-            {app.candidate?.email && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}><Mail size={10} style={{ color: C.textFaint }} />{app.candidate.email}</span>}
-            {app.candidate?.location && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}><MapPin size={10} style={{ color: C.textFaint }} />{app.candidate.location}</span>}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: C.textMuted, fontWeight: 500, fontFamily: "'DM Sans', system-ui, sans-serif" }}><Calendar size={10} style={{ color: C.textFaint }} />{fmt(app.created_at)}</span>
-          </div>
-
-          {skills.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 11 }}>
-              {skills.slice(0, 5).map((s, i) => <span key={i} style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: C.blueDim, color: C.blue, border: `1px solid ${C.blue}20`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{s}</span>)}
-              {skills.length > 5 && <span style={{ padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: C.surfaceDeep, color: C.textFaint, fontFamily: "'DM Sans', system-ui, sans-serif" }}>+{skills.length - 5}</span>}
+            <div className="rapp-card-actions">
+              {(status === 'applied' || status === 'scored') && (
+                <>
+                  <ActionBtn onClick={() => act('shortlisted')} disabled={isLoading} bg={C.gradBlue} color={C.white} shadow={C.shadowBlue}>
+                    {localLoading === 'shortlisted' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Star size={11} fill="currentColor" />} Shortlist
+                  </ActionBtn>
+                  <ActionBtn onClick={() => act('rejected')} disabled={isLoading} bg={C.dangerDim} color={C.danger} border={C.dangerBorder}>
+                    {localLoading === 'rejected' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <XCircle size={11} />} Reject
+                  </ActionBtn>
+                </>
+              )}
+              {status === 'shortlisted' && (
+                <>
+                  <ActionBtn onClick={() => act('hired')} disabled={isLoading} bg={`linear-gradient(135deg, ${C.indigo}, ${C.indigoLight})`} color={C.white} shadow="0 4px 16px rgba(155,109,255,0.32)">
+                    {localLoading === 'hired' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <UserCheck size={11} />} Hire
+                  </ActionBtn>
+                  <ActionBtn onClick={() => act('rejected')} disabled={isLoading} bg={C.dangerDim} color={C.danger} border={C.dangerBorder}>
+                    {localLoading === 'rejected' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <UserX size={11} />} Pass
+                  </ActionBtn>
+                </>
+              )}
+              {status === 'rejected' && (
+                <ActionBtn onClick={() => act('applied')} disabled={isLoading} bg={C.amberDim} color={C.amber} border={C.amberBorder}>
+                  {localLoading === 'applied' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={11} />} Reconsider
+                </ActionBtn>
+              )}
+              {status === 'hired' && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 9, background: C.indigoDim, border: `1px solid ${C.indigo}35`, color: C.indigo, fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+                  <CheckCircle size={11} /> Hired
+                </span>
+              )}
+              {app.source_url && (
+                <a href={app.source_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 11px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, fontSize: 12, fontWeight: 600, textDecoration: 'none', transition: 'all 0.15s', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: C.shadow }}
+                  onMouseEnter={e => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = C.borderFocus; a.style.color = C.blue; }}
+                  onMouseLeave={e => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = C.border; a.style.color = C.textMuted; }}>
+                  <ExternalLink size={10} /> Profile
+                </a>
+              )}
+              <button onClick={() => setExpanded(v => !v)} style={{ width: 32, height: 32, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, cursor: 'pointer', transition: 'all 0.15s', boxShadow: C.shadow, flexShrink: 0 }}
+                onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.borderHov; b.style.color = C.blue; b.style.boxShadow = C.shadowBlue; }}
+                onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.border; b.style.color = C.textMuted; b.style.boxShadow = C.shadow; }}>
+                {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
             </div>
-          )}
-
-          {/* Score bars — recruiter only */}
-          {hasScore && (
-            <div style={{ display: 'flex', gap: 14, maxWidth: 380 }}>
-              <ScoreBar value={app.semantic_score ?? 0} label="Semantic" color={C.blue} />
-              <ScoreBar value={app.rule_score ?? 0}     label="Rule"     color={C.teal} />
-            </div>
-          )}
-        </div>
-
-        {/* Score ring + actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
-          {hasScore ? <ScoreRing score={app.final_score!} /> : <PendingScore />}
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {(status === 'applied' || status === 'scored') && (
-              <>
-                <ActionBtn onClick={() => act('shortlisted')} disabled={isLoading} bg={C.gradBlue} color={C.white} shadow={C.shadowBlue}>
-                  {localLoading === 'shortlisted' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <Star size={11} fill="currentColor" />} Shortlist
-                </ActionBtn>
-                <ActionBtn onClick={() => act('rejected')} disabled={isLoading} bg={C.dangerDim} color={C.danger} border={C.dangerBorder}>
-                  {localLoading === 'rejected' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <XCircle size={11} />} Reject
-                </ActionBtn>
-              </>
-            )}
-            {status === 'shortlisted' && (
-              <>
-                <ActionBtn onClick={() => act('hired')} disabled={isLoading} bg={`linear-gradient(135deg, ${C.indigo}, ${C.indigoLight})`} color={C.white} shadow="0 4px 16px rgba(155,109,255,0.32)">
-                  {localLoading === 'hired' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <UserCheck size={11} />} Hire
-                </ActionBtn>
-                <ActionBtn onClick={() => act('rejected')} disabled={isLoading} bg={C.dangerDim} color={C.danger} border={C.dangerBorder}>
-                  {localLoading === 'rejected' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <UserX size={11} />} Pass
-                </ActionBtn>
-              </>
-            )}
-            {status === 'rejected' && (
-              <ActionBtn onClick={() => act('applied')} disabled={isLoading} bg={C.amberDim} color={C.amber} border={C.amberBorder}>
-                {localLoading === 'applied' ? <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} /> : <RefreshCw size={11} />} Reconsider
-              </ActionBtn>
-            )}
-            {status === 'hired' && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 13px', borderRadius: 9, background: C.indigoDim, border: `1px solid ${C.indigo}35`, color: C.indigo, fontSize: 12, fontWeight: 700, fontFamily: "'DM Sans', system-ui, sans-serif" }}>
-                <CheckCircle size={11} /> Hired
-              </span>
-            )}
-            {app.source_url && (
-              <a href={app.source_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 11px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, fontSize: 12, fontWeight: 600, textDecoration: 'none', transition: 'all 0.15s', fontFamily: "'DM Sans', system-ui, sans-serif", boxShadow: C.shadow }}
-                onMouseEnter={e => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = C.borderFocus; a.style.color = C.blue; }}
-                onMouseLeave={e => { const a = e.currentTarget as HTMLAnchorElement; a.style.borderColor = C.border; a.style.color = C.textMuted; }}>
-                <ExternalLink size={10} /> Profile
-              </a>
-            )}
-            <button onClick={() => setExpanded(v => !v)} style={{ width: 32, height: 32, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, cursor: 'pointer', transition: 'all 0.15s', boxShadow: C.shadow }}
-              onMouseEnter={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.borderHov; b.style.color = C.blue; b.style.boxShadow = C.shadowBlue; }}
-              onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.border; b.style.color = C.textMuted; b.style.boxShadow = C.shadow; }}>
-              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-            </button>
           </div>
         </div>
       </div>
 
       {expanded && (
-        <div style={{ borderTop: `1px solid ${C.border}`, padding: '14px 22px 18px', background: C.surface, display: 'flex', gap: 28, flexWrap: 'wrap', animationName: 'fadeUp', animationDuration: '0.2s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: '14px 18px 18px', background: C.surface, display: 'flex', gap: 20, flexWrap: 'wrap', animationName: 'fadeUp', animationDuration: '0.2s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
           {[
             { label: 'Candidate ID',  value: `#${app.candidate_id}` },
             { label: 'Final score',   value: hasScore ? `${Math.round(app.final_score!)}%` : 'Pending' },
@@ -392,7 +387,7 @@ const CandidateCard: React.FC<{ app: Application; rank: number; onStatus: (id: n
           ].map(({ label, value }) => (
             <div key={label}>
               <div style={{ fontSize: 10, color: C.textFaint, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 3, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{label}</div>
-              <div style={{ fontSize: 14, color: C.text, fontWeight: 800, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
+              <div style={{ fontSize: 13, color: C.text, fontWeight: 800, fontFamily: "'Fraunces', Georgia, serif" }}>{value}</div>
             </div>
           ))}
         </div>
@@ -403,7 +398,7 @@ const CandidateCard: React.FC<{ app: Application; rank: number; onStatus: (id: n
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN PAGE
-   ═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════════════ */
 const ApplicationsPage: React.FC = () => {
   const { user } = useSelector((s: RootState) => s.auth);
   const { jobs, loading: loadingJobs } = useJobs();
@@ -417,7 +412,7 @@ const ApplicationsPage: React.FC = () => {
 
   const handleJobSelect = (j: Job | null) => { setSelectedJob(j); filter.clearFilters(); };
 
-  if (user?.role !== 'recruiter') return (
+  if (user?.role !== 'recruiter' && user?.role !== 'admin') return (
     <div style={{ maxWidth: 400, margin: '80px auto', textAlign: 'center', fontFamily: "'DM Sans', system-ui, sans-serif", padding: 24 }}>
       <Card style={{ padding: 48 }}>
         <AlertCircle size={36} style={{ color: C.danger, display: 'block', margin: '0 auto 14px' }} />
@@ -428,7 +423,7 @@ const ApplicationsPage: React.FC = () => {
   );
 
   return (
-    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", minHeight: '100vh', background: C.bg, padding: 24, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", minHeight: '100vh', background: C.bg, padding: 'clamp(12px,3vw,24px)', position: 'relative', overflow: 'hidden' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&display=swap');
         @keyframes fadeUp    { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
@@ -438,47 +433,196 @@ const ApplicationsPage: React.FC = () => {
         @keyframes orbFloat2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(50px,-35px)} }
         @keyframes orbFloat3 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-25px,20px)} }
         @keyframes pulseGlow { 0%,100%{opacity:1} 50%{opacity:0.35} }
-        *{box-sizing:border-box} ::selection{background:rgba(79,125,255,0.18);color:#0d1b3e}
-        input::placeholder{color:#8fa3c8;font-weight:400} input:focus{outline:none}
-        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:rgba(79,125,255,0.18);border-radius:99px}
-        .rapp-stat-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
-        @media(max-width:1100px){.rapp-stat-grid{grid-template-columns:repeat(4,1fr)}}
-        @media(max-width:640px){.rapp-stat-grid{grid-template-columns:repeat(2,1fr)}}
+        *{box-sizing:border-box}
+        ::selection{background:rgba(79,125,255,0.18);color:#0d1b3e}
+        input::placeholder{color:#8fa3c8;font-weight:400}
+        input:focus{outline:none}
+        ::-webkit-scrollbar{width:4px}
+        ::-webkit-scrollbar-thumb{background:rgba(79,125,255,0.18);border-radius:99px}
+
+        /* ── Stat grid ── */
+        .rapp-stat-grid {
+          display:grid;
+          grid-template-columns:repeat(7,1fr);
+          gap:8px;
+          margin-bottom:20px;
+          position:relative;
+          z-index:2;
+        }
+
+        /* ── Page header ── */
+        .rapp-header {
+          display:flex;
+          align-items:flex-start;
+          justify-content:space-between;
+          flex-wrap:wrap;
+          gap:14px;
+          margin-bottom:26px;
+          position:relative;
+          z-index:2;
+        }
+
+        .rapp-header-left {
+          display:flex;
+          align-items:center;
+          gap:14px;
+        }
+
+        .rapp-header-right {
+          display:flex;
+          align-items:center;
+          gap:10px;
+          flex-wrap:wrap;
+        }
+
+        /* ── Job selector ── */
+        .rapp-job-selector {
+          position:relative;
+          min-width:260px;
+          max-width:360px;
+          flex:1;
+        }
+
+        /* ── Filter bar ── */
+        .rapp-filter-bar {
+          display:flex;
+          gap:10px;
+          align-items:center;
+          flex-wrap:wrap;
+        }
+
+        .rapp-filter-pills {
+          display:flex;
+          gap:5px;
+          flex-wrap:wrap;
+          align-items:center;
+        }
+
+        /* ── Candidate card layout ── */
+        .rapp-card-top {
+          display:flex;
+          gap:14px;
+          align-items:flex-start;
+        }
+
+        .rapp-card-left {
+          display:flex;
+          gap:12px;
+          align-items:flex-start;
+          flex:1;
+          min-width:0;
+        }
+
+        .rapp-card-right {
+          display:flex;
+          flex-direction:column;
+          align-items:flex-end;
+          gap:10px;
+          flex-shrink:0;
+        }
+
+        .rapp-card-actions {
+          display:flex;
+          gap:5px;
+          flex-wrap:wrap;
+          justify-content:flex-end;
+        }
+
+        .rapp-name-row {
+          display:flex;
+          align-items:center;
+          gap:8px;
+          flex-wrap:wrap;
+          margin-bottom:4px;
+        }
+
+        .rapp-meta-row {
+          display:flex;
+          gap:12px;
+          flex-wrap:wrap;
+          margin-top:4px;
+        }
+
+        .rapp-score-bars {
+          display:flex;
+          gap:12px;
+          max-width:360px;
+          margin-top:10px;
+        }
+
+        /* ── Required skills row ── */
+        .rapp-skills-header {
+          display:flex;
+          gap:5px;
+          flex-wrap:wrap;
+          margin-top:12px;
+        }
+
+        /* ── Tablet (≤1100px) ── */
+        @media(max-width:1100px) {
+          .rapp-stat-grid { grid-template-columns:repeat(4,1fr); }
+          .rapp-card-right { flex-direction:row; align-items:center; flex-wrap:wrap; }
+          .rapp-card-actions { justify-content:flex-start; }
+        }
+
+        /* ── Tablet (≤800px) ── */
+        @media(max-width:800px) {
+          .rapp-stat-grid { grid-template-columns:repeat(4,1fr); }
+          .rapp-header { gap:12px; }
+          .rapp-header-right { width:100%; }
+          .rapp-job-selector { min-width:unset; max-width:100%; flex:1 1 100%; }
+          .rapp-filter-bar { flex-direction:column; align-items:stretch; }
+        }
+
+        /* ── Mobile (≤600px) ── */
+        @media(max-width:600px) {
+          .rapp-stat-grid { grid-template-columns:repeat(2,1fr); }
+          .rapp-card-top { flex-direction:column; }
+          .rapp-card-right { flex-direction:row; align-items:center; width:100%; justify-content:space-between; }
+          .rapp-card-left { flex-wrap:wrap; }
+          .rapp-score-bars { max-width:100%; }
+          .rapp-name-row { gap:5px; }
+        }
+
+        /* ── Very small (≤420px) ── */
+        @media(max-width:420px) {
+          .rapp-stat-grid { grid-template-columns:repeat(2,1fr); }
+          .rapp-card-actions { width:100%; }
+        }
       `}</style>
       <BgPattern />
 
       {/* Header */}
-      <div style={{ marginBottom: 26, position: 'relative', zIndex: 2, animationName: 'fadeUp', animationDuration: '0.5s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 50, height: 50, borderRadius: 15, background: C.gradBlue, boxShadow: C.shadowBlue, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={22} color={C.white} />
-            </div>
-            <div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>Applications</h1>
-              <p style={{ fontSize: 13, color: C.textMuted, fontWeight: 500, margin: '3px 0 0' }}>{selectedJob ? `Reviewing candidates for ${selectedJob.title}` : 'Select a job to review applications'}</p>
-            </div>
+      <div className="rapp-header" style={{ animationName: 'fadeUp', animationDuration: '0.5s', animationTimingFunction: 'cubic-bezier(0.22,1,0.36,1)', animationFillMode: 'both' }}>
+        <div className="rapp-header-left">
+          <div style={{ width: 50, height: 50, borderRadius: 15, background: C.gradBlue, boxShadow: C.shadowBlue, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Users size={22} color={C.white} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 99, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 12, fontWeight: 700, color: C.teal }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.teal, animation: 'pulseGlow 2s ease infinite', display: 'inline-block' }} /> Pipeline Active
-            </span>
-            <JobSelector jobs={jobs} selected={selectedJob} loading={loadingJobs} onSelect={handleJobSelect} />
+          <div>
+            <h1 style={{ fontSize: 'clamp(18px,4vw,24px)', fontWeight: 800, color: C.text, letterSpacing: '-0.6px', margin: 0, lineHeight: 1.1, fontFamily: "'Fraunces', Georgia, serif" }}>Applications</h1>
+            <p style={{ fontSize: 13, color: C.textMuted, fontWeight: 500, margin: '3px 0 0' }}>{selectedJob ? `Reviewing candidates for ${selectedJob.title}` : 'Select a job to review applications'}</p>
           </div>
         </div>
-        {parseSkills(selectedJob?.skills_required).length > 0 && (
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 12 }}>
-            <span style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, alignSelf: 'center' }}>Required:</span>
-            {parseSkills(selectedJob?.skills_required).map((s, i) => (
-              <span key={i} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: C.surfaceDeep, color: C.textMuted, border: `1px solid ${C.border}`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{s}</span>
-            ))}
-          </div>
-        )}
+        <div className="rapp-header-right">
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 99, background: C.tealDim, border: `1px solid ${C.tealBorder}`, fontSize: 12, fontWeight: 700, color: C.teal, whiteSpace: 'nowrap' }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.teal, animation: 'pulseGlow 2s ease infinite', display: 'inline-block' }} /> Pipeline Active
+          </span>
+          <JobSelector jobs={jobs} selected={selectedJob} loading={loadingJobs} onSelect={handleJobSelect} />
+        </div>
       </div>
+
+      {selectedJob && parseSkills(selectedJob?.skills_required).length > 0 && (
+        <div className="rapp-skills-header" style={{ marginBottom: 16, position: 'relative', zIndex: 2 }}>
+          <span style={{ fontSize: 11, color: C.textFaint, fontWeight: 600, alignSelf: 'center', flexShrink: 0 }}>Required:</span>
+          {parseSkills(selectedJob?.skills_required).map((s, i) => (
+            <span key={i} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: C.surfaceDeep, color: C.textMuted, border: `1px solid ${C.border}`, fontFamily: "'DM Sans', system-ui, sans-serif" }}>{s}</span>
+          ))}
+        </div>
+      )}
 
       {/* Stats */}
       {selectedJob && apps.length > 0 && (
-        <div className="rapp-stat-grid" style={{ marginBottom: 20, position: 'relative', zIndex: 2 }}>
+        <div className="rapp-stat-grid">
           <StatCard label="Total"       value={filter.stats.total}                                  color={C.blue}   icon={<Users size={14}/>}     delay={0}    />
           <StatCard label="Scored"      value={filter.stats.scored}                                 color={C.blue}   icon={<BarChart3 size={14}/>} delay={0.04} />
           <StatCard label="Sourced"     value={filter.stats.sourced}                                color={C.indigo} icon={<Layers size={14}/>}    delay={0.08} />
@@ -492,22 +636,22 @@ const ApplicationsPage: React.FC = () => {
       {/* Filter bar */}
       {selectedJob && (
         <Card style={{ padding: '12px 14px', marginBottom: 14 }} delay={0.1}>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
-              <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint }} />
+          <div className="rapp-filter-bar">
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <Search size={13} style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.textFaint, pointerEvents: 'none' }} />
               <input value={filter.search} onChange={e => filter.setSearch(e.target.value)} placeholder="Search name, email, skills…"
                 style={{ width: '100%', padding: '8px 32px 8px 33px', border: `1.5px solid ${C.border}`, borderRadius: 9, fontSize: 13, color: C.text, background: C.surface, fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 500, transition: 'border-color 0.15s' }}
                 onFocus={e => { e.target.style.borderColor = C.borderFocus; (e.target as HTMLInputElement).style.boxShadow = `0 0 0 3px ${C.blue}14`; }}
                 onBlur={e  => { e.target.style.borderColor = C.border; (e.target as HTMLInputElement).style.boxShadow = 'none'; }} />
               {filter.search && <button onClick={() => filter.setSearch('')} style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: C.textFaint, padding: 0, display: 'flex' }}><X size={13} /></button>}
             </div>
-            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div className="rapp-filter-pills">
               <Filter size={12} style={{ color: C.textFaint, flexShrink: 0 }} />
               {(['all', 'applied', 'scored', 'shortlisted', 'rejected', 'hired'] as const).map(s => {
                 const active = filter.statusFilter === s;
                 const meta = s === 'all' ? null : STATUS_META[s];
                 return (
-                  <button key={s} onClick={() => filter.setStatus(s)} style={{ padding: '5px 12px', borderRadius: 8, border: `1px solid ${active ? (meta?.border ?? `${C.blue}40`) : C.border}`, background: active ? (meta?.bg ?? C.blueDim) : C.white, color: active ? (meta?.color ?? C.blue) : C.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all .15s', boxShadow: active ? `0 0 10px ${meta?.color ?? C.blue}18` : 'none' }}
+                  <button key={s} onClick={() => filter.setStatus(s)} style={{ padding: '5px 11px', borderRadius: 8, border: `1px solid ${active ? (meta?.border ?? `${C.blue}40`) : C.border}`, background: active ? (meta?.bg ?? C.blueDim) : C.white, color: active ? (meta?.color ?? C.blue) : C.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all .15s', boxShadow: active ? `0 0 10px ${meta?.color ?? C.blue}18` : 'none', whiteSpace: 'nowrap' }}
                     onMouseEnter={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = C.blueDim; b.style.borderColor = `${C.blue}35`; } }}
                     onMouseLeave={e => { if (!active) { const b = e.currentTarget as HTMLButtonElement; b.style.background = C.white; b.style.borderColor = C.border; } }}>
                     {s === 'all' ? 'All' : STATUS_META[s as AppStatus].label}
@@ -516,7 +660,7 @@ const ApplicationsPage: React.FC = () => {
                 );
               })}
             </div>
-            <button onClick={refresh} disabled={loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, fontSize: 12, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s', boxShadow: C.shadow }}
+            <button onClick={refresh} disabled={loading} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 9, border: `1px solid ${C.border}`, background: C.white, color: C.textMuted, fontSize: 12, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', system-ui, sans-serif", transition: 'all 0.15s', boxShadow: C.shadow, whiteSpace: 'nowrap', flexShrink: 0 }}
               onMouseEnter={e => { if (!loading) { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.borderFocus; b.style.color = C.blue; } }}
               onMouseLeave={e => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = C.border; b.style.color = C.textMuted; }}>
               <RefreshCw size={12} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} /> Refresh
