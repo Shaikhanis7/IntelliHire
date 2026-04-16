@@ -292,7 +292,7 @@ const LandingPage: React.FC = () => {
       <Marquee />
       <FeaturesSection />
       <HowSection />
-      <ArchitectureSection />
+      {/* <ArchitectureSection /> */}
       <TestimonialsSection />
 
       <CTASection
