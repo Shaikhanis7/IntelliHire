@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreateRecruiterFAB } from '../features/admin/components/CreateRecruiterFAB';
+import ManageRecruitersButton from '../features/admin/components/ManageRecruiters';
 
 const S = {
   sidebarBg:  'linear-gradient(175deg, #eef2fb 0%, #f0f4ff 50%, #ebf0fa 100%)',
@@ -290,26 +291,33 @@ export const DashboardLayout: React.FC = () => {
           </nav>
         </div>
 
-        {/* Admin block */}
-        {isAdmin && (
-          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
-            style={{ padding: '0 10px', position: 'relative', zIndex: 2 }}>
-            <SLabel label="Admin" />
-            <div style={{ borderRadius: 11, background: S.redDim, border: `1px solid ${S.redBorder}`, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(220,38,38,0.06)', border: `1px solid ${S.redBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <ShieldCheck size={13} color={S.red} />
-              </div>
-              <div>
-                <p style={{ fontSize: 11.5, fontWeight: 700, color: S.red, margin: 0 }}>Admin Controls</p>
-                <p style={{ fontSize: 10, color: 'rgba(220,38,38,0.5)', margin: '1px 0 0', lineHeight: 1.4 }}>
-                  <UserPlus size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
-                  Manage recruiters
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
+     
 
+
+{isAdmin && (
+  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+    style={{ padding: '0 10px', position: 'relative', zIndex: 2 }}>
+    <SLabel label="Admin" />
+
+    {/* Admin info card */}
+    <div style={{ borderRadius: 11, background: S.redDim, border: `1px solid ${S.redBorder}`, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(220,38,38,0.06)', border: `1px solid ${S.redBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <ShieldCheck size={13} color={S.red} />
+      </div>
+      <div>
+        <p style={{ fontSize: 11.5, fontWeight: 700, color: S.red, margin: 0 }}>Admin Controls</p>
+        <p style={{ fontSize: 10, color: 'rgba(220,38,38,0.5)', margin: '1px 0 0', lineHeight: 1.4 }}>
+          <UserPlus size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
+          Full platform access
+        </p>
+      </div>
+    </div>
+
+    {/* Manage Recruiters trigger */}
+    <ManageRecruitersButton />
+  </motion.div>
+)}
+       
         <div style={{ flex: 1 }} />
 
         {/* AI sourcing pill */}

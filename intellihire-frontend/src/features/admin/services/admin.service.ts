@@ -8,7 +8,7 @@ export interface CreateRecruiterPayload {
   password: string;
 }
 
-export interface CreatedRecruiter {
+export interface Recruiter {
   id:    number;
   name:  string;
   email: string;
@@ -20,13 +20,25 @@ export const adminService = {
    * POST /admin/recruiters
    * Admin-only: creates a recruiter account.
    */
-  createRecruiter: async (
-    payload: CreateRecruiterPayload,
-  ): Promise<CreatedRecruiter> => {
-    const { data } = await axiosInstance.post<CreatedRecruiter>(
-      '/admin/recruiters',
-      payload,
-    );
+  createRecruiter: async (payload: CreateRecruiterPayload): Promise<Recruiter> => {
+    const { data } = await axiosInstance.post<Recruiter>('/admin/recruiters', payload);
     return data;
+  },
+
+  /**
+   * GET /admin/recruiters
+   * Admin-only: returns all recruiter accounts (newest first).
+   */
+  listRecruiters: async (): Promise<Recruiter[]> => {
+    const { data } = await axiosInstance.get<Recruiter[]>('/admin/recruiters');
+    return data;
+  },
+
+  /**
+   * DELETE /admin/recruiters/:id
+   * Admin-only: permanently removes a recruiter account.
+   */
+  deleteRecruiter: async (id: number): Promise<void> => {
+    await axiosInstance.delete(`/admin/recruiters/${id}`);
   },
 };
