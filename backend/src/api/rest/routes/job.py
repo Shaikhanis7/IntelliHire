@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends, HTTPException , status 
+"""
+src/api/rest/routes/job.py
+"""
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
+from src.api.rest.dependencies import require_admin_or_recruiter
 from src.core.services import job_service
 from src.data.clients.postgres_client import get_db
-from src.utils.security import get_current_user
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
+
+# ── Schemas ───────────────────────────────────────────────────────────────────
 
 class JobCreateRequest(BaseModel):
     title:               str
@@ -32,10 +37,8 @@ class JobUpdateRequest(BaseModel):
 async def create_job(
     data: JobCreateRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    if user["role"] != "recruiter":
-        raise HTTPException(403, "Recruiters only.")
     from src.core.services.job_service import create_job_posting
     return await create_job_posting(db, recruiter_id=user["id"], **data.model_dump())
 
@@ -51,10 +54,8 @@ async def list_jobs(db: AsyncSession = Depends(get_db)):
 @router.get("/mine")
 async def my_jobs(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    if user["role"] != "recruiter":
-        raise HTTPException(403, "Recruiters only.")
     from src.core.services.job_service import list_jobs_by_recruiter
     return await list_jobs_by_recruiter(db, recruiter_id=user["id"])
 
@@ -69,59 +70,39 @@ async def get_job(job_id: int, db: AsyncSession = Depends(get_db)):
     return _serialize_job(job)
 
 
+# ── PATCH /jobs/{job_id}/reopen ───────────────────────────────────────────────
 @router.patch("/{job_id}/reopen")
 async def reopen_job(
     job_id: int,
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    """
-    Reopen a closed job posting (set is_active = True).
-    Only the recruiter who created the job can reopen it.
-    """
-    if user["role"] != "recruiter":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only recruiters can reopen jobs."
-        )
-    
+    """Reopen a closed job posting. Only the recruiter who created it can reopen it."""
     job = await job_service.reopen_job_posting(db, job_id, user["id"])
-    
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found or you don't have permission to reopen it."
+            detail="Job not found or you don't have permission to reopen it.",
         )
-    
     return job
 
 
-
+# ── PATCH /jobs/{job_id}/close ────────────────────────────────────────────────
 @router.patch("/{job_id}/close")
 async def close_job(
     job_id: int,
-    user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    """
-    Close a job posting (set is_active = False).
-    Only the recruiter who created the job can close it.
-    """
-    if user["role"] != "recruiter":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only recruiters can close jobs."
-        )
-    
+    """Close a job posting. Only the recruiter who created it can close it."""
     job = await job_service.close_job_posting(db, job_id, user["id"])
-    
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found or you don't have permission to close it."
+            detail="Job not found or you don't have permission to close it.",
         )
-    
     return job
+
 
 # ── PATCH /jobs/{job_id} ──────────────────────────────────────────────────────
 @router.patch("/{job_id}")
@@ -129,10 +110,8 @@ async def update_job(
     job_id: int,
     data: JobUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    if user["role"] != "recruiter":
-        raise HTTPException(403, "Recruiters only.")
     from src.core.services.job_service import update_job
     try:
         return await update_job(
@@ -143,19 +122,17 @@ async def update_job(
         )
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
 # ── DELETE /jobs/{job_id} ─────────────────────────────────────────────────────
 @router.delete("/{job_id}")
 async def delete_job(
     job_id: int,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user: dict = Depends(require_admin_or_recruiter),          # ← guards admin or recruiter
 ):
-    if user["role"] != "recruiter":
-        raise HTTPException(403, "Recruiters only.")
     from src.core.services.job_service import delete_job
     try:
         return await delete_job(db, job_id=job_id, recruiter_id=user["id"])
     except ValueError as e:
         raise HTTPException(404, str(e))
-    
-# In your jobs router file (e.g., src/api/routes/jobs.py)
