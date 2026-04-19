@@ -3,7 +3,6 @@ from .candidate import Candidate
 from .job import Job
 from .application import Application
 from .resume import Resume
-from .blacklist import Blacklist
 from .sourcing import Sourcing
 from .refresh_token import RefreshToken
 from .resume_section import ResumeSection

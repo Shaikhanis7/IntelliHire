@@ -2,7 +2,7 @@
 
 export interface User {
   id: number;
-  name: string;   // fallback to email if backend doesn't return name
+  name: string;
   email: string;
   role: 'recruiter' | 'candidate' | 'admin';
 }
@@ -21,13 +21,11 @@ export interface RegisterCredentials {
 export interface AuthResponse {
   access_token:  string;
   refresh_token: string;
-  // NOTE: your backend login response does NOT include a user field.
-  // user is parsed from the JWT token in authSlice.
-  user?: User;
+  user?: User;   // present on candidate register; absent on plain login (parsed from JWT)
 }
 
 export interface AuthState {
-  user:            User | null;
+  user:            User | null;   // always has name once populated
   token:           string | null;
   refreshToken:    string | null;
   isLoading:       boolean;

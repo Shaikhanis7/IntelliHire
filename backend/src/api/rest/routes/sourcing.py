@@ -35,7 +35,7 @@ class ShortlistRequest(BaseModel):
 async def sourcing_history(
     job_id: Optional[int] = Query(None, description="Filter runs by job ID"),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    _user: dict = Depends(require_admin_or_recruiter),
 ):
     from src.core.services.sourcing_service import get_sourcing_history
     runs = await get_sourcing_history(db, job_id=job_id)
@@ -48,7 +48,7 @@ async def sourcing_candidates(
     sourcing_id: int,
     job_id: Optional[int] = Query(None, description="Job ID for validation"),
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    _user: dict = Depends(require_admin_or_recruiter),
 ):
     if job_id is not None:
         from src.data.models.postgres.sourcing import Sourcing
@@ -78,7 +78,7 @@ async def sourcing_candidates(
 async def apply_sourced_candidate(
     data: ApplyRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    _user: dict = Depends(require_admin_or_recruiter),
 ):
     from src.core.services.application_service import apply_for_job_with_resume
     try:
@@ -95,18 +95,8 @@ async def apply_sourced_candidate(
 async def sourcing_runs_for_job(
     job_id: int,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    _user: dict = Depends(require_admin_or_recruiter),
 ):
-    """
-    Returns all sourcing runs for a specific job, newest first.
-    Response shape:
-    {
-        "job_id": 42,
-        "sourced": true,
-        "total_runs": 3,
-        "runs": [{ "sourcing_id": 7, "job_id": 42, "role": "...", ... }]
-    }
-    """
     from src.data.models.postgres.sourcing import Sourcing
     from sqlalchemy import select
 
@@ -138,7 +128,7 @@ async def source(
     data: SourcingRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    current_user: dict = Depends(require_admin_or_recruiter),  # ← renamed from _user
 ):
     """Kicks off background sourcing task. Returns sourcing_id immediately.
     Frontend polls GET /sourcing/{sourcing_id}/candidates until data appears."""
@@ -158,13 +148,23 @@ async def source(
     if not skills:
         raise HTTPException(400, "Job has no skills_required — cannot source.")
 
+    triggered_by = current_user.get("id")  # ← the recruiter/admin who clicked Source
+
     from src.data.repositories.sourcing_repo import create_sourcing
-    sourcing = await create_sourcing(db, data.job_id, role, job.location or "India")
+    sourcing = await create_sourcing(
+        db,
+        data.job_id,
+        role,
+        job.location or "India",
+        triggered_by=triggered_by,          # ← fixed: was missing
+    )
 
     from src.core.tasks.sourcing_tasks import source_candidates_task
     background_tasks.add_task(
         source_candidates_task,
-        data.job_id, role, skills, min_exp, data.count, data.mode, sourcing.id,
+        data.job_id, role, skills, min_exp, data.count, data.mode,
+        sourcing.id,
+        triggered_by,                       # ← fixed: pass to background task too
     )
 
     return {
@@ -184,7 +184,7 @@ async def source(
 async def shortlist_sourced_candidate(
     data: ShortlistRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict = Depends(require_admin_or_recruiter),    # ← guards admin or recruiter
+    _user: dict = Depends(require_admin_or_recruiter),
 ):
     from src.data.models.postgres.application import Application
     from src.data.models.postgres.source_candidates import SourcingCandidate

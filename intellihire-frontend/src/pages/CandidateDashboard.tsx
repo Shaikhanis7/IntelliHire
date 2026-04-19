@@ -166,7 +166,7 @@ const CandidateDashboard: React.FC = () => {
               >
                 {greeting},{' '}
                 <span style={{ background: C.gradBlue, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  {user?.name?.split(' ')[0]}
+                  {user?.name} 
                 </span>
               </h1>
 

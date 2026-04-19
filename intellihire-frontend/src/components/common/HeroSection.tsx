@@ -233,7 +233,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
         </motion.div>
 
         {/* Stats */}
-        <motion.div
+        {/* <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: 0.5 }}
@@ -242,15 +242,17 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             paddingTop: 'clamp(24px, 4vw, 48px)',
             borderTop: `1px solid ${C.border}`,
           }}
-        >
-          {[
+        > */}
+          {/* {[
             { val: '1,200+', label: 'Companies hiring'    },
             { val: '68%',    label: 'Faster time-to-hire' },
             { val: '4.9★',   label: 'Average rating'      },
           ].map((s, i) => (
             <Counter key={s.label} end={s.val} label={s.label} delay={0.55 + i * 0.12} />
-          ))}
-        </motion.div>
+          ))} */}
+        {/* </motion.div> */}
+
+        
       </motion.div>
 
       {/* Bottom fade */}

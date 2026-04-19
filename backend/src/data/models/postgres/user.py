@@ -8,10 +8,11 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     email = Column(String, unique=True)
     password = Column(String)
+    name = Column(String)
+
     role = Column(String)
     is_active = Column(Boolean, default=True)
 
-    # 🔥 Relationships
     candidate = relationship("Candidate", back_populates="user", uselist=False)
     jobs = relationship("Job", back_populates="recruiter")
     tokens = relationship("RefreshToken", back_populates="user")

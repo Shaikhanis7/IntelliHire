@@ -7,8 +7,8 @@ async def get_user_by_email(db, email: str):
     return result.scalar_one_or_none()
 
 
-async def create_user(db, email: str, password: str, role: str):
-    user = User(email=email, password=password, role=role)
+async def create_user(db, email: str, password: str, role: str, name: str):
+    user = User(email=email, password=password, role=role, name=name)
 
     db.add(user)
     await db.commit()

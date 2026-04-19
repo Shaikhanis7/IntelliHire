@@ -3,10 +3,10 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../features/auth/hooks/useAuth';
 import {
   LayoutDashboard, Briefcase, LogOut, Menu, Users, Sparkles,
-  ChevronRight, Bell, Search, Zap, ListChecks, ShieldCheck, UserPlus, X,
+  ChevronRight, Bell, Search, Zap, ListChecks, ShieldCheck, X,
+  UserCog, BarChart2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreateRecruiterFAB } from '../features/admin/components/CreateRecruiterFAB';
 import ManageRecruitersButton from '../features/admin/components/ManageRecruiters';
 
 const S = {
@@ -64,6 +64,12 @@ const CANDIDATE_NAV: NavEntry[] = [
   { name: 'Dashboard',       href: '/dashboard',       icon: <LayoutDashboard size={15} /> },
   { name: 'Jobs',            href: '/jobs',             icon: <Briefcase size={15} />       },
   { name: 'My Applications', href: '/my-applications', icon: <ListChecks size={15} />      },
+];
+
+const ADMIN_NAV: NavEntry[] = [
+  { name: 'Manage Recruiters', href: '/manage-recruiters', icon: <Users size={15} />      },
+  { name: 'Manage Candidates', href: '/manage-candidates', icon: <UserCog size={15} />    },
+  { name: 'Sourcing Admin',    href: '/admin/sourcing',    icon: <BarChart2 size={15} />  },
 ];
 
 const NavItem: React.FC<{
@@ -166,7 +172,6 @@ export const DashboardLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled]     = useState(false);
 
-  // Close sidebar on route change (mobile)
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   useEffect(() => {
@@ -181,7 +186,9 @@ export const DashboardLayout: React.FC = () => {
   const isRecruiter = role === 'recruiter';
   const isAdmin     = role === 'admin';
   const nav         = isAdmin || isRecruiter ? RECRUITER_NAV : CANDIDATE_NAV;
-  const activePage  = nav.find(n => location.pathname.startsWith(n.href))?.name ?? '';
+  const activePage  = nav.find(n => location.pathname.startsWith(n.href))?.name
+    ?? ADMIN_NAV.find(n => location.pathname.startsWith(n.href))?.name
+    ?? '';
 
   const roleChip = isAdmin
     ? { label: 'Admin',     color: S.red,  dim: S.redDim,   border: S.redBorder,  grad: 'linear-gradient(135deg,#991b1b,#dc2626)' }
@@ -203,7 +210,6 @@ export const DashboardLayout: React.FC = () => {
         @keyframes ping3 { 0%{transform:scale(1);opacity:.8} 100%{transform:scale(2.5);opacity:0} }
         @keyframes pageIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
 
-        /* ── Responsive ── */
         .dbl-sidebar {
           position: fixed; inset: 0 auto 0 0; width: 248px;
           background: ${S.sidebarBg};
@@ -221,17 +227,13 @@ export const DashboardLayout: React.FC = () => {
         .dbl-topbar { padding: 0 26px; gap: 14px; }
 
         @media (max-width: 1023px) {
-          .dbl-sidebar {
-            transform: translateX(-100%);
-            width: 272px;
-          }
+          .dbl-sidebar { transform: translateX(-100%); width: 272px; }
           .dbl-sidebar.open { transform: translateX(0); }
           .dbl-main { margin-left: 0; }
           .dbl-topbar-search { display: none; }
           .dbl-page-pad { padding: 16px 16px 44px; }
           .dbl-topbar { padding: 0 16px; gap: 10px; }
         }
-
         @media (max-width: 480px) {
           .dbl-page-pad { padding: 12px 12px 44px; }
           .dbl-topbar { padding: 0 12px; gap: 8px; }
@@ -242,15 +244,9 @@ export const DashboardLayout: React.FC = () => {
       <div className={`dbl-sidebar${mobileOpen ? ' open' : ''}`}>
         <SidebarDeco />
 
-        {/* Mobile close button */}
         <button
           onClick={() => setMobileOpen(false)}
-          style={{
-            display: 'none',
-            position: 'absolute', top: 14, right: 14, zIndex: 10,
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: S.textLow, padding: 6, borderRadius: 8,
-          }}
+          style={{ display: 'none', position: 'absolute', top: 14, right: 14, zIndex: 10, background: 'none', border: 'none', cursor: 'pointer', color: S.textLow, padding: 6, borderRadius: 8 }}
           className="dbl-sb-close"
         >
           <X size={18} />
@@ -281,7 +277,7 @@ export const DashboardLayout: React.FC = () => {
           </span>
         </motion.div>
 
-        {/* Nav */}
+        {/* Main nav */}
         <div style={{ position: 'relative', zIndex: 2 }}>
           <SLabel label="Navigation" />
           <nav style={{ padding: '0 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -291,33 +287,25 @@ export const DashboardLayout: React.FC = () => {
           </nav>
         </div>
 
-     
+        {/* Admin-only nav section */}
+        {isAdmin && (
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
+            style={{ padding: '0 10px', position: 'relative', zIndex: 2 }}>
+            <SLabel label="Admin" />
+            <nav style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {ADMIN_NAV.map((item, i) => (
+                <NavItem
+                  key={item.name}
+                  item={item}
+                  active={location.pathname.startsWith(item.href)}
+                  onClick={() => setMobileOpen(false)}
+                  index={i}
+                />
+              ))}
+            </nav>
+          </motion.div>
+        )}
 
-
-{isAdmin && (
-  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.28 }}
-    style={{ padding: '0 10px', position: 'relative', zIndex: 2 }}>
-    <SLabel label="Admin" />
-
-    {/* Admin info card */}
-    <div style={{ borderRadius: 11, background: S.redDim, border: `1px solid ${S.redBorder}`, padding: '10px 13px', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(220,38,38,0.06)', border: `1px solid ${S.redBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <ShieldCheck size={13} color={S.red} />
-      </div>
-      <div>
-        <p style={{ fontSize: 11.5, fontWeight: 700, color: S.red, margin: 0 }}>Admin Controls</p>
-        <p style={{ fontSize: 10, color: 'rgba(220,38,38,0.5)', margin: '1px 0 0', lineHeight: 1.4 }}>
-          <UserPlus size={9} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 3 }} />
-          Full platform access
-        </p>
-      </div>
-    </div>
-
-    {/* Manage Recruiters trigger */}
-    <ManageRecruitersButton />
-  </motion.div>
-)}
-       
         <div style={{ flex: 1 }} />
 
         {/* AI sourcing pill */}
@@ -385,16 +373,11 @@ export const DashboardLayout: React.FC = () => {
             boxShadow: scrolled ? M.shadow : 'none',
           }}
         >
-          {/* Hamburger — always visible on mobile */}
           <motion.button
             onClick={() => setMobileOpen(true)}
             whileTap={{ scale: 0.9 }}
             className="dbl-hamburger"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: M.blue, padding: 6, display: 'flex',
-              borderRadius: 8, flexShrink: 0,
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: M.blue, padding: 6, display: 'flex', borderRadius: 8, flexShrink: 0 }}
           >
             <Menu size={20} />
           </motion.button>
@@ -418,7 +401,6 @@ export const DashboardLayout: React.FC = () => {
 
           <div style={{ flex: 1 }} />
 
-          {/* Search pill — hidden on mobile via CSS */}
           <motion.div
             whileHover={{ borderColor: M.borderHov, background: '#ffffff' }}
             className="dbl-topbar-search"
@@ -429,7 +411,6 @@ export const DashboardLayout: React.FC = () => {
             <kbd style={{ padding: '2px 7px', borderRadius: 6, background: M.blueDim, border: `1px solid ${M.border}`, fontSize: 10, color: M.textFaint, fontFamily: 'inherit' }}>⌘K</kbd>
           </motion.div>
 
-          {/* Bell */}
           <motion.button whileHover={{ scale: 1.05, borderColor: M.borderHov }} whileTap={{ scale: 0.95 }}
             style={{ position: 'relative', width: 36, height: 36, borderRadius: 10, background: M.surface, border: `1px solid ${M.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: M.textFaint, boxShadow: '0 1px 3px rgba(15,23,42,0.05)', transition: 'all 0.2s', flexShrink: 0 }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = M.blue; }}
@@ -444,7 +425,6 @@ export const DashboardLayout: React.FC = () => {
         </main>
       </div>
 
-      {/* Hide hamburger on desktop via extra CSS */}
       <style>{`
         @media (min-width: 1024px) {
           .dbl-hamburger { display: none !important; }
@@ -455,8 +435,6 @@ export const DashboardLayout: React.FC = () => {
           .dbl-sb-close   { display: flex !important; }
         }
       `}</style>
-
-      <CreateRecruiterFAB />
     </div>
   );
 };

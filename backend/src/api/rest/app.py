@@ -19,7 +19,6 @@ async def lifespan(app: FastAPI):
     
     async with engine.begin() as conn: # ← drop all tables on startup for clean slate
         await conn.run_sync(Base.metadata.create_all)   # ← create all tables
-        # await conn.run_sync(Base.metadata.create_all)  # ← create all tables
 
     yield
  

@@ -643,7 +643,7 @@ const SourcingPage: React.FC = () => {
   const filter     = useCandidateFilter(candidates.candidates);
 
   const trigger = useSourcingTrigger({
-    onQueued: (sourcingId) => { candidates.reset(); candidates.setActiveSourcingId?.(sourcingId); },
+    onQueued: (sourcingId) => { candidates.reset(); candidates.fetchCandidates(sourcingId, selectedJob?.id); },
     onComplete: async (_c: any, sourcingId: number) => {
       if (selectedJob) await history.fetchHistory(selectedJob.id);
       if (selectedJob) await candidates.fetchCandidates(sourcingId, selectedJob.id);
