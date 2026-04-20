@@ -4,7 +4,7 @@ src/api/routes/resume_router.py
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.services.resume_service import upload_resume_internal
+# from src.core.services.resume_service import upload_resume_internal
 from src.data.clients.postgres_client import get_db
 from src.data.clients.s3_client import get_presigned_url
 from src.data.repositories.candidate_repo import get_candidate_by_user_id
@@ -16,18 +16,18 @@ router = APIRouter(prefix="/resumes", tags=["Resumes"])
 
 # ── POST /resumes/upload ──────────────────────────────────────────────────────
 # Standalone resume upload (not tied to a specific job application)
-@router.post("/upload")
-async def upload(
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    if user["role"] != "candidate":
-        raise HTTPException(403, "Only candidates can upload resumes.")
-    candidate = await get_candidate_by_user_id(db, user["id"])
-    if not candidate:
-        raise HTTPException(404, "Candidate profile not found.")
-    return await upload_resume_internal(db, candidate_id=candidate.id, file=file)
+# @router.post("/upload")
+# async def upload(
+#     file: UploadFile = File(...),
+#     db: AsyncSession = Depends(get_db),
+#     user=Depends(get_current_user),
+# ):
+#     if user["role"] != "candidate":
+#         raise HTTPException(403, "Only candidates can upload resumes.")
+#     candidate = await get_candidate_by_user_id(db, user["id"])
+#     if not candidate:
+#         raise HTTPException(404, "Candidate profile not found.")
+#     return await upload_resume_internal(db, candidate_id=candidate.id, file=file)
 
 
 # ── GET /resumes/me ───────────────────────────────────────────────────────────

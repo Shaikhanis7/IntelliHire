@@ -20,6 +20,82 @@ log = setup_logger()
 from src.core.services.resume_langchain_service import ResumeSectionEmbedder
 _embedder = ResumeSectionEmbedder()
 
+# ── JD Generation Agent (lazy-imported to keep startup fast) ─────────────────
+_jd_agent = None
+
+def _get_jd_agent():
+    global _jd_agent
+    if _jd_agent is None:
+        from src.control.agents.jd_generation_agent import JDGenerationAgent
+        _jd_agent = JDGenerationAgent()
+    return _jd_agent
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 0.  JD GENERATION  (AI-powered)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def generate_job_description(
+    title: str,
+    skills: list[str],
+    experience_years: int = 0,
+    location: str | None = None,
+    extra_context: str | None = None,
+) -> dict:
+    """
+    Call the JDGenerationAgent to produce a full structured JD.
+
+    This is a stateless helper — it does NOT touch the database.
+    The frontend can call this on-the-fly while filling the job form,
+    then submit the finalized data via create_job_posting().
+
+    Returns the GeneratedJD as a plain dict ready for JSON serialisation.
+    """
+    agent = _get_jd_agent()
+    jd    = await agent.generate_jd(
+        title            = title,
+        skills           = skills,
+        experience_years = experience_years,
+        location         = location,
+        extra_context    = extra_context,
+    )
+    log.info(
+        f"[job_service] generate_job_description | title='{title}' "
+        f"skills={len(skills)} suggested_skills={len(jd.suggested_skills)}"
+    )
+    return jd.model_dump()
+
+
+async def enhance_job_description(
+    title: str,
+    raw_description: str,
+    skills: list[str],
+) -> dict:
+    """
+    Enhance / rewrite a recruiter-drafted description via the JDGenerationAgent.
+
+    Returns EnhancedJD as a plain dict.
+    """
+    agent  = _get_jd_agent()
+    result = await agent.enhance_jd(
+        title           = title,
+        raw_description = raw_description,
+        skills          = skills,
+    )
+    log.info(f"[job_service] enhance_job_description | title='{title}'")
+    return result.model_dump()
+
+
+async def extract_skills_from_description(description: str) -> list[str]:
+    """
+    Extract skill names from a free-text job description.
+    Returns a plain list of strings.
+    """
+    agent  = _get_jd_agent()
+    skills = await agent.extract_skills_from_jd(description)
+    log.info(f"[job_service] extract_skills_from_description → {skills}")
+    return skills
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1.  CREATE
@@ -133,9 +209,6 @@ async def _attach_job_embedding(db: AsyncSession, job: Job) -> None:
         vec: list[float] = await asyncio.to_thread(_embedder.embed_query, job_text)
         job.embedding = json.dumps(vec)
         await db.commit()
-        # ✅ FIX: refresh here too so the job object stays usable after commit.
-        # This is safe to call multiple times — the caller's refresh is
-        # idempotent if all attrs are already loaded.
         await db.refresh(job)
         log.info(f"Job {job.id} embedding stored ({len(vec)} dims)")
     except Exception as exc:
@@ -196,20 +269,17 @@ async def close_job_posting(
     db: AsyncSession,
     job_id: int,
     recruiter_id: int,
-) -> dict :
+) -> dict:
     """
     Close a job posting (set is_active = False).
     Returns the updated job or None if not found/unauthorized.
     """
     job = await get_job_by_id(db, job_id)
-    
-    # if not job or job.recruiter_id != recruiter_id:
-    #     return None
-    
+
     job.is_active = False
     await db.commit()
     await db.refresh(job)
-    
+
     log.info(f"Job {job_id} closed by recruiter {recruiter_id}")
     return _serialize_job(job)
 
@@ -218,19 +288,16 @@ async def reopen_job_posting(
     db: AsyncSession,
     job_id: int,
     recruiter_id: int,
-) -> dict :
+) -> dict:
     """
     Reopen a closed job posting (set is_active = True).
     Returns the updated job or None if not found/unauthorized.
     """
     job = await get_job_by_id(db, job_id)
-    
-    # if not job or job.recruiter_id != recruiter_id:
-    #     return None
-    
+
     job.is_active = True
     await db.commit()
     await db.refresh(job)
-    
+
     log.info(f"Job {job_id} reopened by recruiter {recruiter_id}")
     return _serialize_job(job)

@@ -1,7 +1,6 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
- 
+
 from src.core.exceptions.auth_exceptions import (
     UserAlreadyExists,
     InvalidCredentials,
@@ -22,10 +21,10 @@ from src.core.services.auth_service import (
 )
 from src.data.clients.postgres_client import get_db
 from src.utils.security import security, get_current_user
- 
+
 router = APIRouter(tags=["Authentication"])
- 
- 
+
+
 # ── POST /auth/register  (recruiter / admin) ──────────────────────────────────
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
@@ -34,10 +33,10 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     except UserAlreadyExists as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=exc.message,           # "An account with this email already exists."
+            detail=exc.message,
         )
- 
- 
+
+
 # ── POST /auth/register/candidate ─────────────────────────────────────────────
 @router.post("/register/candidate", status_code=status.HTTP_201_CREATED)
 async def register_candidate(
@@ -55,21 +54,21 @@ async def register_candidate(
     except UserAlreadyExists as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=exc.message,           # contains 'already' → correct frontend branch
+            detail=exc.message,
         )
- 
+
     tokens = await login_user(db, data.email, data.password)
     return {
         "user": {
             "id":    user.id,
             "email": user.email,
             "role":  user.role,
-            "name":  data.name,
+            "name":  user.name,       # ← sourced from the saved model, not data
         },
         **tokens,
     }
- 
- 
+
+
 # ── POST /auth/login ───────────────────────────────────────────────────────────
 @router.post("/login")
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
@@ -78,15 +77,15 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     except UserNotFound as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=exc.message,           # contains 'not found' → correct frontend branch
+            detail=exc.message,
         )
     except InvalidCredentials as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=exc.message,           # contains 'invalid' → correct frontend branch
+            detail=exc.message,
         )
- 
- 
+
+
 # ── POST /auth/refresh ─────────────────────────────────────────────────────────
 @router.post("/refresh")
 async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
@@ -97,8 +96,8 @@ async def refresh(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=exc.message,
         )
- 
- 
+
+
 # ── GET /auth/me ───────────────────────────────────────────────────────────────
 @router.get("/me")
 async def get_me(user=Depends(get_current_user)):
@@ -106,9 +105,10 @@ async def get_me(user=Depends(get_current_user)):
         "id":    user["id"],
         "email": user["sub"],
         "role":  user["role"],
+        "name":  user["name"],      
     }
- 
- 
+
+
 # ── POST /auth/logout ──────────────────────────────────────────────────────────
 @router.post("/logout")
 async def logout(
@@ -123,4 +123,3 @@ async def logout(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=exc.message,
         )
- 

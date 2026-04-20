@@ -425,7 +425,7 @@ const CandidateView: React.FC = () => {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   RECRUITER VIEW
+   RECRUITER VIEW  (shared by recruiter + admin)
 ═══════════════════════════════════════════════════════════════ */
 const RecruiterView: React.FC = () => {
   const navigate = useNavigate();
@@ -571,6 +571,9 @@ const RecruiterView: React.FC = () => {
 const JobPostingsPage: React.FC = () => {
   const { user } = useSelector((s: RootState) => s.auth);
 
+  // recruiter AND admin both get the management view
+  const isManagementRole = user?.role === 'recruiter' || user?.role === 'admin';
+
   return (
     <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: C.bg, padding: 'clamp(12px,3vw,24px)', position: 'relative', overflow: 'hidden', minHeight: '100%' }}>
       <style>{`
@@ -650,7 +653,7 @@ const JobPostingsPage: React.FC = () => {
       <BgPattern />
 
       <div style={{ position: 'relative', zIndex: 2 }}>
-        {user?.role === 'recruiter' ? <RecruiterView /> : <CandidateView />}
+        {isManagementRole ? <RecruiterView /> : <CandidateView />}
       </div>
     </div>
   );

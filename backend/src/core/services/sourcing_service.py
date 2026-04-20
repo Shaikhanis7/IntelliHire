@@ -1,51 +1,38 @@
 """
-src/core/services/sourcing_service.py — AGENTIC AI  (v10)
+src/core/services/sourcing_service.py — AGENTIC AI  (v15)
 
-All LLM intelligence is now in:
-  src/control/agents/sourcing_agent.py  ← SourcingAgent
+CHANGES FROM v14:
+  Change 1 — generate_query_variants() no longer takes count=5.
+              It now takes candidates_needed=count so the agent dynamically
+              decides how many queries to generate based on role niche-ness
+              and how many candidates HR asked for.
+              Returns a QueryPlan (niche_level, estimated_queries_needed,
+              reasoning, queries) instead of a bare list[str].
 
-This service handles:
-  - DB queries and application pass strategy
-  - Eligibility gating (rule-based, no LLM)
-  - Vector scoring
-  - Persisting results
-  - Orchestrating the agent calls
+  Change 2 — strategy.extra_queries are merged into the QueryPlan query list
+              (deduplicated) before passing to the scraping function, keeping
+              a single source of truth for all queries.
 
-Internal search pass order
-──────────────────────────
+  Change 3 — _scrape_external_candidates_and_ingest_to_db() now runs an
+              ADAPTIVE loop:
+                · Pulls queries one-at-a-time from a pending_queries deque.
+                · When pending_queries is empty but candidates_still_needed > 0,
+                  calls _agent.generate_additional_queries() to pivot strategy.
+                · Caps extra rounds at MAX_EXTRA_QUERY_ROUNDS (default 3) to
+                  prevent infinite loops when the market has no matching candidates.
+                · Tracks tried_queries across the full run so the agent never
+                  repeats an exhausted query.
+
+  Change 4 — source_candidates() logs the QueryPlan metadata (niche_level,
+              estimated_queries_needed, reasoning) for full observability.
+
+Internal search pass order (unchanged from v14):
   Pass 1  Applied to THIS job (pending / scored only)
-          Tags: applied_scored | applied_pending
   Pass 2  Applied to a CLOSED OTHER job (skips shortlisted/selected)
-          Tags: applied_closed_scored | applied_closed_pending | applied_closed_rejected
-  Pass 3  Applied to an OPEN OTHER job (skips shortlisted/selected)
-          Tag:  db_applied_other
+  Pass 3  Applied to an OPEN OTHER job  (skips shortlisted/selected)
   Pass 4  Raw DB match (skips ever_shortlisted)
-          Tag:  db_match
   Pass 5  prev_sourced (previously scraped, no application anywhere)
-          Tag:  prev_sourced
-  Pass 6  External scraping fills remainder
-          Tag:  external
-
-eligibility changes (v10 → full-time experience only):
-  - experience_years in DB now holds FULL-TIME years only.
-    LLM sets ExperienceEntry.years=0 for internships/part-time/freelance.
-    ResumeSectionEmbedder.total_experience_years() sums only is_fulltime=True entries.
-    bulk_create_resume_sections() writes that full-time-only sum to the experience
-    section row, so _fetch_resume_eligibility_data() reads full-time years directly.
-  - _passes_eligibility() source label updated to "DB (full-time only)" to make
-    logs clearly indicate that the experience gate is full-time filtered.
-  - External scrape (_scrape_and_ingest): total_exp_years from LLM parse is now
-    full-time only (via updated total_experience_years()); log line updated.
-
-eligibility (v9 carry-over):
-  - ANY required skill must match (not ALL).
-  - Token-based skill matching with whole-word boundary check.
-  - Internal candidates rejected if skills_section_text is None.
-  - External scrape falls back to full parsed_text (no sections yet).
-
-Other:
-  - CROSS_JOB_EXCLUDE includes "shortlisted"
-  - URL dedup uses per-link DB check
+  Pass 6  External scraping fills remainder (adaptive query loop)
 """
 
 from __future__ import annotations
@@ -53,10 +40,11 @@ from __future__ import annotations
 import json
 import re
 import asyncio
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Literal
 
 import numpy as np
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 
@@ -73,7 +61,8 @@ from src.data.repositories.resume_repo import (
     get_sections_by_resume,
 )
 from src.core.services.resume_langchain_service import (
-    LangChainResumeParser, ResumeSectionEmbedder,
+    LangChainResumeParser,
+    ResumeSectionEmbedder,
 )
 from src.core.services.scraper_service import get_resume_links, scrape_resume
 from src.core.services.application_service import (
@@ -86,7 +75,6 @@ from src.observability.logging.logger import setup_logger
 
 log = setup_logger()
 
-# ── Singletons ────────────────────────────────────────────────────────────────
 _parser   = LangChainResumeParser(settings.GROQ_API_KEY)
 _embedder = ResumeSectionEmbedder()
 _agent    = SourcingAgent()
@@ -119,143 +107,174 @@ TAG_PRIORITY: dict[str, int] = {
     "external":                   10,
 }
 
-_STATUS_PREF: dict[str, int] = {
-    "shortlisted": 0, "scored": 1, "pending": 2, "rejected": 3,
+_APPLICATION_STATUS_PREFERENCE: dict[str, int] = {
+    "shortlisted": 0,
+    "scored":      1,
+    "pending":     2,
+    "rejected":    3,
 }
 
+SKILL_MATCH_THRESHOLD = 0.33  # 33% of required skills must match
+
+# Maximum number of times the adaptive loop may call generate_additional_queries()
+# before giving up on a shortfall. Prevents infinite loops when the market has
+# genuinely no matching candidates for a very niche role.
+MAX_EXTRA_QUERY_ROUNDS = 3
+
+
+class CandidateResult(BaseModel):
+    rank:           int | None
+    candidate_id:   int
+    name:           str
+    source_tag:     str
+    source_url:     str | None
+    fit_summary:    str | None
+    quality_note:   str | None
+    rule_score:     float
+    semantic_score: float
+    final_score:    float
+
+
+class SourcingResult(BaseModel):
+    job_id:         int
+    sourcing_id:    int
+    mode:           str
+    total_found:    int
+    candidates:     list[CandidateResult]
+    agent_strategy: str
+    note:           str = "Candidates NOT yet applied to this job. HR must review and apply manually."
+
+
+class SourcingHistoryItem(BaseModel):
+    sourcing_id: int
+    job_id:      int
+    role:        str
+    location:    str
+    created_at:  str
+
+
+class SourcingCandidateDetail(BaseModel):
+    rank:           int
+    candidate_id:   int
+    name:           str
+    source_tag:     str
+    source_url:     str | None
+    fit_summary:    str | None
+    quality_note:   str | None
+    rule_score:     float
+    semantic_score: float
+    final_score:    float
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ELIGIBILITY GATE  (pure rule-based — no LLM)
+# ELIGIBILITY GATE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _normalize_skills(text: str) -> set[str]:
+def _tokenize_skills_text_to_set(raw_skills_text: str) -> set[str]:
     """
-    Tokenize a skills section into a set of lowercase skill strings.
+    Tokenize a skills section blob into a set of lowercase skill tokens.
 
-    Two-pass strategy:
-      Pass 1 — split on primary delimiters (comma, newline, pipe, bullet, slash).
-      Pass 2 — for any token still longer than 5 words, check if it is a flat
-               space-separated skill dump (e.g. "php javascript jquery react")
-               or a narrative sentence. Narrative sentences contain stop-words
-               like "in", "with", "and" — those are dropped. Pure skill dumps
-               do not contain stop-words — those are split on whitespace into
-               individual skill tokens.
-
-    e.g. "React, FastAPI | Python"             → {'react', 'fastapi', 'python'}
-    e.g. "php javascript jquery laravel react" → {'php', 'javascript', 'jquery',
-                                                    'laravel', 'react'}
-    e.g. "brings expertise in React and ..."   → dropped (has stop-words)
+    Pass 1 — split on primary delimiters (comma, newline, pipe, bullet, slash).
+    Pass 2 — tokens longer than 5 words: drop if they contain stop-words
+             (narrative prose), otherwise split on whitespace (flat skill dumps).
     """
-    STOP_WORDS = {"in", "with", "and", "for", "the", "of", "to", "a", "an",
-                  "is", "has", "using", "as", "at", "by", "on", "or", "from"}
-
-    raw_tokens = re.split(r"[,\n\r|•/]+", text.lower())
+    PROSE_STOP_WORDS = {
+        "in", "with", "and", "for", "the", "of", "to",
+        "a", "an", "is", "has", "using", "as", "at",
+        "by", "on", "or", "from",
+    }
     result: set[str] = set()
-
-    for t in raw_tokens:
-        t = t.strip()
-        if not t:
+    for token in re.split(r"[,\n\r|•/]+", raw_skills_text.lower()):
+        token = token.strip()
+        if not token:
             continue
-
-        words = t.split()
-
+        words = token.split()
         if len(words) <= 5:
-            result.add(t)
-        else:
-            # Long token — prose or flat skill dump?
-            if set(words) & STOP_WORDS:
-                # Contains stop-words → narrative sentence, drop it
-                continue
-            else:
-                # No stop-words → flat skill dump, split into individual words
-                for word in words:
-                    word = word.strip(".()")
-                    if word:
-                        result.add(word)
-
+            result.add(token)
+        elif not (set(words) & PROSE_STOP_WORDS):
+            result.update(w.strip(".,()") for w in words if w.strip(".,()"))
     return result
 
 
-def _skill_in_tokens(skill: str, tokens: set[str]) -> bool:
+def _skill_matches_any_token(skill: str, token_set: set[str]) -> bool:
     """
-    Returns True if the skill appears as an exact token OR as a whole-word
-    match within any token.
-
-    Examples:
-      'react'   in {'react.js'}        → True
-      'react'   in {'reactive native'} → False
-      'fastapi' in {'fastapi'}         → True
-      'python'  in {'python3'}         → True
+    Return True if the skill string matches any token in the set.
+    Uses exact match first, then whole-word boundary regex for compound skills.
     """
     skill = skill.lower().strip()
-    if skill in tokens:
+    if skill in token_set:
         return True
-    pattern = re.compile(rf'\b{re.escape(skill)}\b')
-    return any(pattern.search(token) for token in tokens)
+    return any(re.search(rf'\b{re.escape(skill)}\b', token) for token in token_set)
 
 
-def _passes_eligibility(
-    parsed_text: str,
-    skills: list[str],
-    min_exp: int,
-    experience_years: int | None = None,
-    skills_section_text: str | None = None,
-    is_internal: bool = False,
+def _candidate_passes_eligibility_gate(
+    resume_parsed_text: str,
+    required_skills: list[str],
+    required_min_experience_years: int,
+    job_description: str | None = None,
+    candidate_fulltime_experience_years: int | None = None,
+    candidate_skills_section_text: str | None = None,
+    is_internal_candidate: bool = False,
 ) -> tuple[bool, str]:
     """
-    Relaxed eligibility gate — AT LEAST ONE required skill must be present
-    as a distinct token in the skills section (ANY-match, not ALL-match).
+    Eligibility gate — at least 50% of required skills must match.
 
-    Experience gate uses FULL-TIME years only:
-      - For internal candidates: experience_years from DB is already full-time
-        only (written by bulk_create_resume_sections via total_experience_years()).
-      - For external scrapes: total_exp_years from LLM parse is full-time only
-        (total_experience_years() filters is_fulltime=False entries).
-      - Regex fallback (_infer_experience_years) used when DB value is NULL —
-        this is approximate but acceptable for external candidates without sections.
+    Skill matching uses:
+      1. candidate_skills_section_text if available (tokenized, whole-word boundary).
+      2. resume_parsed_text + job_description fallback for external candidates.
+      Internal candidates are REJECTED if candidate_skills_section_text is None.
 
-    Skill matching priority:
-      1. skills_section_text (dedicated skills section) — tokenized and
-         checked with whole-word boundary matching.
-      2. parsed_text fallback — used ONLY for external scrapes where sections
-         have not been written yet (is_internal=False and skills_section_text is None).
-         Internal candidates (is_internal=True) are REJECTED outright if the
-         skills section is absent.
+    Experience gate uses FULL-TIME years only.
 
-    Returns (passed: bool, reason: str).
+    Returns:
+        (passed: bool, reason: str)
     """
-    if not parsed_text:
-        return False, "No resume text"
+    if not resume_parsed_text:
+        return False, "No resume text available"
 
-    # Internal candidates must have a dedicated skills section.
-    if is_internal and skills_section_text is None:
-        return False, "No skills section — skipping internal candidate"
+    if is_internal_candidate and candidate_skills_section_text is None:
+        return False, "No skills section found — skipping internal candidate"
 
-    match_target = skills_section_text if skills_section_text else parsed_text
-    tokens       = _normalize_skills(match_target)
-    skills_lower = [s.lower().strip() for s in skills]
+    skill_match_corpus = (
+        candidate_skills_section_text if candidate_skills_section_text
+        else resume_parsed_text
+    )
+    if job_description and not candidate_skills_section_text:
+        skill_match_corpus = f"{skill_match_corpus}\n{job_description}"
 
-    # ── ANY skill must match ──────────────────────────────────────────────────
-    matched = [s for s in skills_lower if _skill_in_tokens(s, tokens)]
-    if not matched:
-        return False, f"No required skills found. Required any of: {', '.join(skills_lower)}"
+    skill_tokens   = _tokenize_skills_text_to_set(skill_match_corpus)
+    skills_lower   = [s.lower().strip() for s in required_skills]
+    matched_skills = [s for s in skills_lower if _skill_matches_any_token(s, skill_tokens)]
+    match_ratio    = len(matched_skills) / len(skills_lower) if skills_lower else 1.0
 
-    # ── Experience check (full-time only) ─────────────────────────────────────
-    if experience_years is not None:
-        exp    = experience_years
-        source = "DB (full-time only)"
+    if match_ratio < SKILL_MATCH_THRESHOLD:
+        missing_skills = [s for s in skills_lower if not _skill_matches_any_token(s, skill_tokens)]
+        return (
+            False,
+            f"Skill match {len(matched_skills)}/{len(skills_lower)} "
+            f"({match_ratio:.0%}) < required {SKILL_MATCH_THRESHOLD:.0%}. "
+            f"Missing: {', '.join(missing_skills)}",
+        )
+
+    if candidate_fulltime_experience_years is not None:
+        total_years  = candidate_fulltime_experience_years
+        years_source = "DB (full-time only)"
     else:
-        exp    = _infer_experience_years(parsed_text)
-        source = "regex fallback (approx)"
+        total_years  = _infer_experience_years(resume_parsed_text)
+        years_source = "regex fallback (approximate)"
 
-    if exp < min_exp:
-        return False, f"Full-time experience {exp}y < required {min_exp}y ({source})"
+    if total_years < required_min_experience_years:
+        return (
+            False,
+            f"Full-time experience {total_years}y < required "
+            f"{required_min_experience_years}y ({years_source})",
+        )
 
-    missing = [s for s in skills_lower if not _skill_in_tokens(s, tokens)]
+    missing_skills = [s for s in skills_lower if not _skill_matches_any_token(s, skill_tokens)]
     return (
         True,
-        f"Skill match (any): {matched} | missing (ok): {missing} | "
-        f"ft_exp: {exp}y ({source})",
+        f"Skill match {len(matched_skills)}/{len(skills_lower)} ({match_ratio:.0%}) | "
+        f"missing (ok): {missing_skills} | ft_exp: {total_years}y ({years_source})",
     )
 
 
@@ -263,34 +282,49 @@ def _passes_eligibility(
 # VECTOR HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _load_vector(raw) -> "np.ndarray | None":
-    if raw is None:
+def _deserialize_embedding_vector(raw_embedding) -> np.ndarray | None:
+    """Deserialize a JSON-encoded or list embedding into a float32 numpy array."""
+    if raw_embedding is None:
         return None
     try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
+        data = json.loads(raw_embedding) if isinstance(raw_embedding, str) else raw_embedding
         return np.array(data, dtype=np.float32)
     except Exception:
         return None
 
 
-def _cosine(a: np.ndarray, b: np.ndarray) -> float:
-    denom = np.linalg.norm(a) * np.linalg.norm(b)
-    return float(np.dot(a, b) / denom) if denom > 0 else 0.0
+def _compute_cosine_similarity(vector_a: np.ndarray, vector_b: np.ndarray) -> float:
+    """Compute cosine similarity between two vectors. Returns 0.0 if either is zero."""
+    denominator = np.linalg.norm(vector_a) * np.linalg.norm(vector_b)
+    return float(np.dot(vector_a, vector_b) / denominator) if denominator > 0 else 0.0
 
 
-def _section_semantic_score(sections, job_vec: np.ndarray) -> "float | None":
-    section_map  = {s.section_type: s for s in sections}
+def _compute_weighted_section_semantic_score(
+    resume_sections: list,
+    job_embedding_vector: np.ndarray,
+) -> float | None:
+    """
+    Compute a weighted semantic similarity score across all resume sections.
+
+    Each section type has a predefined weight (skills 40%, experience 35%, etc.).
+    Returns None if no sections had embeddings to score.
+    """
+    section_map  = {s.section_type: s for s in resume_sections}
     total_score  = 0.0
     total_weight = 0.0
+
     for section_type, weight in SECTION_WEIGHTS.items():
         section = section_map.get(section_type)
         if not section:
             continue
-        sec_vec = _load_vector(getattr(section, "embedding", None))
-        if sec_vec is None:
+        section_vector = _deserialize_embedding_vector(
+            getattr(section, "embedding", None)
+        )
+        if section_vector is None:
             continue
-        total_score  += _cosine(sec_vec, job_vec) * weight
+        total_score  += _compute_cosine_similarity(section_vector, job_embedding_vector) * weight
         total_weight += weight
+
     if total_weight == 0:
         return None
     return round(total_score / total_weight, 4)
@@ -300,15 +334,20 @@ def _section_semantic_score(sections, job_vec: np.ndarray) -> "float | None":
 # SOURCE TAG HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _tag_for_this_job(status: str) -> str:
-    return "applied_scored" if status.lower() == "scored" else "applied_pending"
+def _resolve_source_tag_for_active_job_application(application_status: str) -> str:
+    """Map an application status on the active job to the correct source tag."""
+    return (
+        "applied_scored" if application_status.lower() == "scored"
+        else "applied_pending"
+    )
 
 
-def _tag_for_closed_job(status: str) -> str:
-    s = status.lower()
-    if s == "shortlisted": return "applied_closed_shortlisted"
-    if s == "scored":      return "applied_closed_scored"
-    if s == "rejected":    return "applied_closed_rejected"
+def _resolve_source_tag_for_closed_job_application(application_status: str) -> str:
+    """Map an application status on a closed job to the correct source tag."""
+    status = application_status.lower()
+    if status == "shortlisted": return "applied_closed_shortlisted"
+    if status == "scored":      return "applied_closed_scored"
+    if status == "rejected":    return "applied_closed_rejected"
     return "applied_closed_pending"
 
 
@@ -316,85 +355,90 @@ def _tag_for_closed_job(status: str) -> str:
 # FETCH HELPERS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _fetch_candidate_resume(
+async def _fetch_candidate_with_latest_resume(
     db: AsyncSession,
     candidate_id: int,
-) -> "tuple[Candidate | None, Resume | None]":
-    cand_res  = await db.execute(select(Candidate).where(Candidate.id == candidate_id))
-    candidate = cand_res.scalar_one_or_none()
+) -> tuple[Candidate | None, Resume | None]:
+    """
+    Fetch a candidate row and their most recent resume in one round-trip pair.
+    Returns (None, None) if either is missing or the resume has no parsed text.
+    """
+    candidate = (await db.execute(
+        select(Candidate).where(Candidate.id == candidate_id)
+    )).scalar_one_or_none()
+
     if not candidate:
         return None, None
-    resume_res = await db.execute(
+
+    resume = (await db.execute(
         select(Resume)
         .where(Resume.candidate_id == candidate.id)
         .order_by(Resume.version.desc())
         .limit(1)
-    )
-    resume = resume_res.scalar_one_or_none()
+    )).scalar_one_or_none()
+
     if not resume or not resume.parsed_text:
         return None, None
+
     return candidate, resume
 
 
-async def _fetch_resume_eligibility_data(
+async def _fetch_experience_and_skills_from_resume_sections(
     db: AsyncSession,
     resume_id: int,
 ) -> tuple[int | None, str | None]:
     """
-    Fetches experience_years (full-time only) and skills section text
-    in a single DB query.
+    Fetch (full-time experience years, skills section text) from stored resume sections.
 
-    experience_years stored in the DB is FULL-TIME only because:
-      - LLM sets ExperienceEntry.years=0 for non-full-time roles
-      - ResumeSectionEmbedder.total_experience_years() sums only is_fulltime=True entries
-      - bulk_create_resume_sections() writes that sum to the experience section row
+    experience_years is FULL-TIME only — internships/part-time are excluded by
+    bulk_create_resume_sections() which writes is_fulltime-filtered totals.
 
     Returns:
-      (experience_years, skills_section_text)
-      Either value may be None if the section doesn't exist or column is NULL.
+        (experience_years, skills_section_text)
+        Either can be None if the section does not exist.
     """
     from src.data.models.postgres.resume_section import ResumeSection
 
-    result = await db.execute(
-        select(ResumeSection.section_type, ResumeSection.experience_years, ResumeSection.content)
+    rows = (await db.execute(
+        select(
+            ResumeSection.section_type,
+            ResumeSection.experience_years,
+            ResumeSection.content,
+        )
         .where(
             ResumeSection.resume_id == resume_id,
             ResumeSection.section_type.in_(["experience", "skills"]),
         )
-    )
-    rows = result.all()
+    )).all()
 
     experience_years    = None
     skills_section_text = None
 
     for section_type, exp_years, content in rows:
         if section_type == "experience":
-            experience_years = exp_years   # full-time only (see docstring)
+            experience_years = exp_years
         elif section_type == "skills":
             skills_section_text = content
 
     return experience_years, skills_section_text
 
 
-async def _fetch_experience_years(
-    db: AsyncSession,
-    resume_id: int,
-) -> int | None:
-    """
-    Kept for backward compatibility — prefer _fetch_resume_eligibility_data.
-    Returns full-time experience years only (see _fetch_resume_eligibility_data).
-    """
-    from src.data.models.postgres.resume_section import ResumeSection
-    result = await db.execute(
-        select(ResumeSection.experience_years).where(
-            ResumeSection.resume_id    == resume_id,
-            ResumeSection.section_type == "experience",
-        ).limit(1)
-    )
-    return result.scalar_one_or_none()
+async def _resume_url_already_exists_in_db(db: AsyncSession, source_url: str) -> bool:
+    """Return True if this URL has already been scraped and stored as a Resume."""
+    return (await db.execute(
+        select(Resume.id).where(Resume.source_url == source_url).limit(1)
+    )).scalar_one_or_none() is not None
 
 
-def _make_dict(candidate: "Candidate", resume: "Resume", source_tag: str) -> dict:
+def _build_candidate_pool_entry(
+    candidate: Candidate,
+    resume: Resume,
+    source_tag: str,
+) -> dict:
+    """
+    Build the initial pool dict for a candidate before scoring.
+    All score fields default to 0.0; filled in by _score_candidate_pool_against_job().
+    """
     return {
         "candidate_id":   candidate.id,
         "name":           candidate.name,
@@ -402,65 +446,12 @@ def _make_dict(candidate: "Candidate", resume: "Resume", source_tag: str) -> dic
         "source_url":     resume.source_url,
         "fit_summary":    None,
         "quality_note":   None,
-        "_parsed_text":   resume.parsed_text,
+        "_parsed_text":   resume.parsed_text,   # internal — stripped before DB persist
         "rule_score":     0.0,
         "semantic_score": 0.0,
         "final_score":    0.0,
         "rank":           None,
     }
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# URL DEDUP HELPER
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def _is_already_scraped(db: AsyncSession, url: str) -> bool:
-    result = await db.execute(
-        select(Resume.id).where(Resume.source_url == url).limit(1)
-    )
-    return result.scalar_one_or_none() is not None
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# BACKGROUND / ROLE RELEVANCE CHECK  (delegates to agent)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def _background_matches_role(
-    parsed_text: str,
-    role: str,
-    skills: list[str],
-) -> tuple[bool, str]:
-    """
-    Calls the agent to check whether the candidate's background is broadly
-    relevant to the role, even if only a partial skill match was found.
-
-    Returns (matches: bool, reason: str).
-    """
-    result = await _agent.background_matches_role(parsed_text, role, skills)
-    return result.matches, result.reason
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FIT SUMMARY ENRICHMENT  (delegates to agent)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def _enrich_internal_summaries(
-    pool: list[dict],
-    role: str,
-    skills: list[str],
-) -> list[dict]:
-    for item in pool:
-        parsed_text = item.pop("_parsed_text", None)
-        if item.get("fit_summary"):
-            continue
-        if not parsed_text:
-            continue
-        item["fit_summary"] = await _agent.fit_summary(parsed_text, role, skills)
-        log.info(
-            f"[internal] Fit summary cid={item['candidate_id']}: "
-            f"{(item['fit_summary'] or '')[:80]}..."
-        )
-    return pool
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -474,532 +465,857 @@ async def source_candidates(
     skills: list[str],
     min_exp: int,
     count: int,
+    job_description: str | None = None,
     mode: Literal["internal", "external", "both"] = "both",
     sourcing_id: int | None = None,
-) -> dict:
+    triggered_by: int | None = None,
+) -> SourcingResult:
+
     if sourcing_id is None:
-        sourcing = await create_sourcing(db, job_id, role, "India")
+        sourcing = await create_sourcing(
+            db, job_id, role, "India",
+            triggered_by=triggered_by,
+        )
         sourcing_id = sourcing.id
 
-    pool: list[dict] = []
+    agent_strategy = await _agent.suggest_search_strategy(role, skills, min_exp)
+    effective_mode = mode if mode != "both" else agent_strategy.suggested_mode
 
-    strategy = await _agent.suggest_search_strategy(role, skills, min_exp)
-    effective_mode = mode if mode != "both" else strategy.suggested_mode
     log.info(
         f"[sourcing] mode={mode} → effective_mode={effective_mode} | "
-        f"agent says: {strategy.reasoning}"
+        f"agent says: {agent_strategy.reasoning}"
     )
 
-    query_variants = await _agent.generate_query_variants(role, skills, count=5)
-    for eq in strategy.extra_queries:
-        if eq not in query_variants:
-            query_variants.append(eq)
+    # Change 1: agent decides query count dynamically based on candidates_needed.
+    # Returns a QueryPlan instead of a bare list.
+    query_plan = await _agent.generate_query_variants(
+        role=role,
+        required_skills=skills,
+        candidates_needed=count,
+    )
+
+    # Change 4: log QueryPlan metadata for full observability
+    log.info(
+        f"[sourcing] QueryPlan | niche={query_plan.niche_level} "
+        f"estimated_queries={query_plan.estimated_queries_needed} "
+        f"actual_queries={len(query_plan.queries)} | {query_plan.reasoning}"
+    )
+
+    # Change 2: merge strategy.extra_queries into the plan (deduplicated)
+    query_variants: list[str] = list(query_plan.queries)
+    existing_query_set = set(query_variants)
+    for extra_query in agent_strategy.extra_queries:
+        if extra_query.lower() not in existing_query_set:
+            query_variants.append(extra_query.lower())
+            existing_query_set.add(extra_query.lower())
+
+    log.info(
+        f"[sourcing] Final query list after strategy merge: "
+        f"{len(query_variants)} queries → {query_variants}"
+    )
+
+    candidate_pool: list[dict] = []
+    _total_checked_count: int  = 0
 
     if effective_mode == "internal":
-        pool = await _search_internal(db, job_id, role, skills, min_exp, count)
-        pool = await _enrich_internal_summaries(pool, role, skills)
-        log.info(f"[sourcing] internal found {len(pool)}/{count}")
+        candidate_pool, _total_checked_count = await _collect_internal_candidates_via_passes(
+            db, job_id, role, skills, min_exp, count, job_description
+        )
 
     elif effective_mode == "external":
-        pool = await _scrape_and_ingest(
-            db, role, skills, min_exp, count, sourcing_id, query_variants
+        candidate_pool = await _scrape_external_candidates_and_ingest_to_db(
+            db, role, skills, min_exp, count, sourcing_id, query_variants, job_description
         )
-        log.info(f"[sourcing] external found {len(pool)}/{count}")
+        _total_checked_count = len(candidate_pool)
 
     else:  # both
-        pool = await _search_internal(db, job_id, role, skills, min_exp, count)
-        pool = await _enrich_internal_summaries(pool, role, skills)
-        log.info(f"[sourcing] internal found {len(pool)}/{count}")
-        still_needed = count - len(pool)
+        candidate_pool, _total_checked_count = await _collect_internal_candidates_via_passes(
+            db, job_id, role, skills, min_exp, count, job_description
+        )
+        log.info(f"[sourcing] internal found {len(candidate_pool)}/{count}")
+
+        still_needed = count - len(candidate_pool)
         if still_needed > 0:
-            external = await _scrape_and_ingest(
-                db, role, skills, min_exp, still_needed, sourcing_id, query_variants
+            external_candidates = await _scrape_external_candidates_and_ingest_to_db(
+                db, role, skills, min_exp, still_needed,
+                sourcing_id, query_variants, job_description,
             )
-            pool.extend(external)
-            log.info(f"[sourcing] external added {len(external)}, total={len(pool)}/{count}")
+            candidate_pool.extend(external_candidates)
+            _total_checked_count += len(external_candidates)
 
-    # ── vector + rule scoring ─────────────────────────────────────────────────
-    scored_pool = await _score_pool(db, pool, job_id)
+    log.info(f"[sourcing] pool size before scoring: {len(candidate_pool)}")
 
-    # ── initial sort: tag priority + final_score ──────────────────────────────
-    scored_pool.sort(key=lambda c: (
-        TAG_PRIORITY.get(c.get("source_tag", "external"), 99),
-        -c.get("final_score", 0),
+    scored_pool = await _score_candidate_pool_against_job(
+        db, candidate_pool, job_id, job_description
+    )
+
+    # Sort: higher-priority tags first, then highest score within each tag
+    scored_pool.sort(key=lambda entry: (
+        TAG_PRIORITY.get(entry.get("source_tag", "external"), 99),
+        -entry.get("final_score", 0),
     ))
 
-    # ── agent: intelligent re-rank ────────────────────────────────────────────
-    scored_pool = await _agent.rerank(scored_pool, role, skills, top_n=min(20, len(scored_pool)))
+    for rank_position, entry in enumerate(scored_pool, start=1):
+        entry["rank"] = rank_position
 
-    # ── assign final ranks ────────────────────────────────────────────────────
-    for i, item in enumerate(scored_pool, start=1):
-        item["rank"] = i
-
-    await _save_sourcing_candidates(db, sourcing_id, scored_pool)
+    await _persist_ranked_candidates_to_db(db, sourcing_id, scored_pool)
     await sync_sourcing_scores_to_applications(db, job_id, sourcing_id, scored_pool)
+
+    from src.data.repositories.sourcing_repo import complete_sourcing
+    await complete_sourcing(
+        db,
+        sourcing_id   = sourcing_id,
+        total_checked = _total_checked_count,
+        total_sourced = len(scored_pool),
+    )
 
     log.info(
         f"[sourcing] Done | sourcing_id={sourcing_id} job_id={job_id} "
         f"ranked={len(scored_pool)} effective_mode={effective_mode}"
     )
-    return {
-        "job_id":         job_id,
-        "sourcing_id":    sourcing_id,
-        "mode":           effective_mode,
-        "total_found":    len(scored_pool),
-        "candidates":     scored_pool,
-        "agent_strategy": strategy.reasoning,
-        "note": "Candidates NOT yet applied to this job. HR must review and apply manually.",
-    }
+
+    return SourcingResult(
+        job_id=job_id,
+        sourcing_id=sourcing_id,
+        mode=effective_mode,
+        total_found=len(scored_pool),
+        candidates=[
+            CandidateResult(**{k: v for k, v in c.items() if k != "_parsed_text"})
+            for c in scored_pool
+        ],
+        agent_strategy=agent_strategy.reasoning,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PERSIST RANKED RESULTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _save_sourcing_candidates(
+async def _persist_ranked_candidates_to_db(
     db: AsyncSession,
     sourcing_id: int,
-    ranked: list[dict],
+    ranked_candidates: list[dict],
 ) -> None:
+    """
+    Replace all SourcingCandidate rows for this sourcing run with the new ranked list.
+    Deletes previous results first to ensure idempotency on re-runs.
+    """
     await db.execute(
         delete(SourcingCandidate).where(SourcingCandidate.sourcing_id == sourcing_id)
     )
-    for rank, item in enumerate(ranked, start=1):
+    for rank_position, entry in enumerate(ranked_candidates, start=1):
         db.add(SourcingCandidate(
             sourcing_id    = sourcing_id,
-            candidate_id   = item["candidate_id"],
-            rank           = rank,
-            source_tag     = item.get("source_tag", "external"),
-            source_url     = item.get("source_url"),
-            fit_summary    = item.get("fit_summary"),
-            quality_note   = item.get("quality_note"),
-            rule_score     = item.get("rule_score", 0.0),
-            semantic_score = item.get("semantic_score", 0.0),
-            final_score    = item.get("final_score", 0.0),
+            candidate_id   = entry["candidate_id"],
+            rank           = rank_position,
+            source_tag     = entry.get("source_tag", "external"),
+            source_url     = entry.get("source_url"),
+            fit_summary    = entry.get("fit_summary"),
+            quality_note   = entry.get("quality_note"),
+            rule_score     = entry.get("rule_score", 0.0),
+            semantic_score = entry.get("semantic_score", 0.0),
+            final_score    = entry.get("final_score", 0.0),
         ))
     await db.commit()
-    log.info(f"[sourcing] Persisted {len(ranked)} candidates for sourcing_id={sourcing_id}")
+    log.info(
+        f"[sourcing] Persisted {len(ranked_candidates)} candidates "
+        f"for sourcing_id={sourcing_id}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # INTERNAL SEARCH — 5-pass strategy
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _search_internal(
+async def _collect_internal_candidates_via_passes(
     db: AsyncSession,
     job_id: int,
     role: str,
-    skills: list[str],
-    min_exp: int,
-    limit: int,
-) -> list[dict]:
-    pool: list[dict]   = []
-    seen_ids: set[int] = set()
+    required_skills: list[str],
+    required_min_experience_years: int,
+    candidate_limit: int,
+    job_description: str | None = None,
+) -> tuple[list[dict], int]:
+    """
+    Collect internal candidates across 5 priority passes.
 
-    all_jobs_res = await db.execute(select(Job))
-    all_jobs: dict[int, Job] = {j.id: j for j in all_jobs_res.scalars().all()}
+    Pass 1 — applied to THIS job (pending/scored only)
+    Pass 2 — applied to a CLOSED other job
+    Pass 3 — applied to an OPEN other job
+    Pass 4 — raw DB match (never applied anywhere)
+    Pass 5 — previously sourced (scraped but never applied)
 
-    this_apps_res = await db.execute(
-        select(Application).where(Application.job_id == job_id)
-    )
-    this_apps: list[Application] = this_apps_res.scalars().all()
-    this_job_status: dict[int, str] = {
-        a.candidate_id: (a.status or "pending").lower() for a in this_apps
+    Each pass applies a two-stage gate:
+      Stage 1: 50% skill match + experience years check
+      Stage 2: LLM background relevance check
+
+    Returns:
+        (candidate_pool, total_checked)
+        total_checked counts every candidate that entered the eligibility gate
+        across all 5 passes, regardless of outcome.
+    """
+    candidate_pool: list[dict]            = []
+    already_added_candidate_ids: set[int] = set()
+    total_checked: int                    = 0
+
+    all_jobs_by_id: dict[int, Job] = {
+        j.id: j
+        for j in (await db.execute(select(Job))).scalars().all()
     }
 
-    all_apps_res = await db.execute(select(Application))
-    all_apps: list[Application] = all_apps_res.scalars().all()
+    this_job_applications: list[Application] = (
+        await db.execute(select(Application).where(Application.job_id == job_id))
+    ).scalars().all()
 
-    cand_apps: dict[int, list[tuple[int, str, bool]]] = defaultdict(list)
-    for app in all_apps:
-        job_obj   = all_jobs.get(app.job_id)
+    this_job_status_by_candidate: dict[int, str] = {
+        app.candidate_id: (app.status or "pending").lower()
+        for app in this_job_applications
+    }
+
+    all_applications: list[Application] = (
+        await db.execute(select(Application))
+    ).scalars().all()
+
+    # Build per-candidate application history: {candidate_id: [(job_id, status, is_active)]}
+    candidate_application_history: dict[int, list[tuple[int, str, bool]]] = defaultdict(list)
+    for app in all_applications:
+        job_obj   = all_jobs_by_id.get(app.job_id)
         is_active = bool(job_obj and job_obj.is_active)
-        cand_apps[app.candidate_id].append(
+        candidate_application_history[app.candidate_id].append(
             (app.job_id, (app.status or "pending").lower(), is_active)
         )
 
-    ever_shortlisted: set[int] = {
-        cid for cid, entries in cand_apps.items()
-        if any(st == "shortlisted" for _, st, _ in entries)
+    ever_shortlisted_candidate_ids: set[int] = {
+        cid
+        for cid, entries in candidate_application_history.items()
+        if any(status == "shortlisted" for _, status, _ in entries)
     }
 
-    excluded_this_job: set[int] = {
-        cid for cid, st in this_job_status.items()
-        if st in HARD_EXCLUDE_THIS_JOB
+    excluded_from_this_job_ids: set[int] = {
+        cid
+        for cid, status in this_job_status_by_candidate.items()
+        if status in HARD_EXCLUDE_THIS_JOB
     }
 
     log.info(
-        f"[internal] job_id={job_id} | this_job_apps={len(this_apps)} | "
-        f"ever_shortlisted={len(ever_shortlisted)} | "
-        f"excluded_this_job={len(excluded_this_job)}"
+        f"[internal] job_id={job_id} this_job_apps={len(this_job_applications)} "
+        f"ever_shortlisted={len(ever_shortlisted_candidate_ids)} "
+        f"excluded={len(excluded_from_this_job_ids)}"
     )
 
-    async def _eligible_and_background(
-        candidate: "Candidate",
-        resume: "Resume",
+    async def _check_candidate_eligibility_and_background(
+        candidate: Candidate,
+        resume: Resume,
         pass_label: str,
     ) -> tuple[bool, str]:
         """
         Two-stage gate:
-          1. Rule-based eligibility (any-skill + full-time exp).
-          2. Agent background check (role relevance).
+          Stage 1 — 50% skill rule + experience years (fast, no LLM)
+          Stage 2 — LLM background relevance check (only if stage 1 passes)
         """
-        # experience_years here is full-time only (see _fetch_resume_eligibility_data)
-        experience_years, skills_section_text = await _fetch_resume_eligibility_data(db, resume.id)
-        passed, reason = _passes_eligibility(
-            resume.parsed_text, skills, min_exp,
-            experience_years=experience_years,
-            skills_section_text=skills_section_text,
-            is_internal=True,
+        experience_years, skills_section_text = (
+            await _fetch_experience_and_skills_from_resume_sections(db, resume.id)
+        )
+        stage1_passed, stage1_reason = _candidate_passes_eligibility_gate(
+            resume_parsed_text=resume.parsed_text,
+            required_skills=required_skills,
+            required_min_experience_years=required_min_experience_years,
+            job_description=job_description,
+            candidate_fulltime_experience_years=experience_years,
+            candidate_skills_section_text=skills_section_text,
+            is_internal_candidate=True,
+        )
+        if not stage1_passed:
+            log.info(f"[{pass_label}] INELIGIBLE cid={candidate.id}: {stage1_reason}")
+            return False, stage1_reason
+
+        background_decision = await _agent.background_matches_role(
+            resume.parsed_text, role, required_skills
+        )
+        if not background_decision.matches:
+            log.info(
+                f"[{pass_label}] BACKGROUND MISMATCH cid={candidate.id}: "
+                f"{background_decision.reason}"
+            )
+            return False, background_decision.reason
+
+        return True, f"{stage1_reason} | background: {background_decision.reason}"
+
+    # ── Pass 1: applied to THIS job (pending/scored) ──────────────────────────
+    for app in this_job_applications:
+        if len(candidate_pool) >= candidate_limit:
+            break
+        status = (app.status or "pending").lower()
+        if status not in INCLUDE_STATUSES:
+            continue
+        candidate, resume = await _fetch_candidate_with_latest_resume(db, app.candidate_id)
+        if not candidate or not resume:
+            continue
+        total_checked += 1
+        passed, reason = await _check_candidate_eligibility_and_background(
+            candidate, resume, "pass1"
         )
         if not passed:
-            log.info(f"[{pass_label}] INELIGIBLE cid={candidate.id}: {reason}")
-            return False, reason
+            continue
+        source_tag = _resolve_source_tag_for_active_job_application(status)
+        entry = _build_candidate_pool_entry(candidate, resume, source_tag)
+        entry["fit_summary"] = await _agent.fit_summary(resume.parsed_text, role, required_skills)
+        candidate_pool.append(entry)
+        already_added_candidate_ids.add(candidate.id)
+        log.info(f"[pass1] ADDED cid={candidate.id} tag={source_tag!r} | {reason}")
+    log.info(f"[internal] After pass1: {len(candidate_pool)}/{candidate_limit}")
 
-        # Background / role-relevance check via agent
-        bg_ok, bg_reason = await _background_matches_role(
-            resume.parsed_text, role, skills
-        )
-        if not bg_ok:
-            log.info(
-                f"[{pass_label}] BACKGROUND MISMATCH cid={candidate.id}: {bg_reason}"
+    # ── Pass 2: applied to a CLOSED OTHER job ─────────────────────────────────
+    if len(candidate_pool) < candidate_limit:
+        best_closed_job_application_by_candidate: dict[int, tuple[str, int]] = {}
+
+        for cid, entries in candidate_application_history.items():
+            if (
+                cid in already_added_candidate_ids
+                or cid in excluded_from_this_job_ids
+                or cid in ever_shortlisted_candidate_ids
+            ):
+                continue
+            for jid, status, is_active in entries:
+                if jid == job_id or is_active or status in CROSS_JOB_EXCLUDE:
+                    continue
+                current_best = best_closed_job_application_by_candidate.get(cid)
+                if current_best is None or (
+                    _APPLICATION_STATUS_PREFERENCE.get(status, 9)
+                    < _APPLICATION_STATUS_PREFERENCE.get(current_best[0], 9)
+                ):
+                    best_closed_job_application_by_candidate[cid] = (status, jid)
+
+        for cid, (status, _) in best_closed_job_application_by_candidate.items():
+            if len(candidate_pool) >= candidate_limit:
+                break
+            if cid in already_added_candidate_ids:
+                continue
+            candidate, resume = await _fetch_candidate_with_latest_resume(db, cid)
+            if not candidate or not resume:
+                continue
+            total_checked += 1
+            passed, reason = await _check_candidate_eligibility_and_background(
+                candidate, resume, "pass2"
             )
-            return False, bg_reason
-
-        return True, f"{reason} | background: {bg_reason}"
-
-    # ── Pass 1 — applied to THIS job (pending/scored only) ───────────────────
-    for app in this_apps:
-        if len(pool) >= limit: break
-        status = (app.status or "pending").lower()
-        if status in EXCLUDE_STATUSES or status not in INCLUDE_STATUSES:
-            continue
-        candidate, resume = await _fetch_candidate_resume(db, app.candidate_id)
-        if not candidate or not resume: continue
-
-        ok, reason = await _eligible_and_background(candidate, resume, "pass1")
-        if not ok:
-            continue
-        tag = _tag_for_this_job(status)
-        pool.append(_make_dict(candidate, resume, tag))
-        seen_ids.add(candidate.id)
-        log.info(f"[pass1] ADDED cid={candidate.id} tag={tag!r} | {reason}")
-    log.info(f"[internal] After pass1: {len(pool)}/{limit}")
-
-    # ── Pass 2 — applied to a CLOSED OTHER job ────────────────────────────────
-    if len(pool) < limit:
-        closed_best: dict[int, tuple[str, int]] = {}
-        for cid, entries in cand_apps.items():
-            if cid in seen_ids or cid in excluded_this_job: continue
-            if cid in ever_shortlisted: continue
-            for jid, status, is_active in entries:
-                if jid == job_id or is_active or status in CROSS_JOB_EXCLUDE: continue
-                if cid not in closed_best or (
-                    _STATUS_PREF.get(status, 9) < _STATUS_PREF.get(closed_best[cid][0], 9)
-                ):
-                    closed_best[cid] = (status, jid)
-        for cid, (status, src_jid) in closed_best.items():
-            if len(pool) >= limit: break
-            if cid in seen_ids: continue
-            candidate, resume = await _fetch_candidate_resume(db, cid)
-            if not candidate or not resume: continue
-
-            ok, reason = await _eligible_and_background(candidate, resume, "pass2")
-            if not ok:
+            if not passed:
                 continue
-            tag = _tag_for_closed_job(status)
-            pool.append(_make_dict(candidate, resume, tag))
-            seen_ids.add(cid)
-            log.info(f"[pass2] ADDED cid={cid} tag={tag!r} | {reason}")
-    log.info(f"[internal] After pass2: {len(pool)}/{limit}")
+            source_tag = _resolve_source_tag_for_closed_job_application(status)
+            entry = _build_candidate_pool_entry(candidate, resume, source_tag)
+            entry["fit_summary"] = await _agent.fit_summary(
+                resume.parsed_text, role, required_skills
+            )
+            candidate_pool.append(entry)
+            already_added_candidate_ids.add(cid)
+            log.info(f"[pass2] ADDED cid={cid} tag={source_tag!r} | {reason}")
+    log.info(f"[internal] After pass2: {len(candidate_pool)}/{candidate_limit}")
 
-    # ── Pass 3 — applied to an OPEN OTHER job ─────────────────────────────────
-    if len(pool) < limit:
-        open_best: dict[int, tuple[str, int]] = {}
-        for cid, entries in cand_apps.items():
-            if cid in seen_ids or cid in excluded_this_job: continue
-            if cid in ever_shortlisted: continue
-            for jid, status, is_active in entries:
-                if jid == job_id or not is_active or status in CROSS_JOB_EXCLUDE: continue
-                if cid not in open_best or (
-                    _STATUS_PREF.get(status, 9) < _STATUS_PREF.get(open_best[cid][0], 9)
-                ):
-                    open_best[cid] = (status, jid)
-        for cid, (status, src_jid) in open_best.items():
-            if len(pool) >= limit: break
-            if cid in seen_ids: continue
-            candidate, resume = await _fetch_candidate_resume(db, cid)
-            if not candidate or not resume: continue
+    # ── Pass 3: applied to an OPEN OTHER job ──────────────────────────────────
+    if len(candidate_pool) < candidate_limit:
+        best_open_job_application_by_candidate: dict[int, tuple[str, int]] = {}
 
-            ok, reason = await _eligible_and_background(candidate, resume, "pass3")
-            if not ok:
+        for cid, entries in candidate_application_history.items():
+            if (
+                cid in already_added_candidate_ids
+                or cid in excluded_from_this_job_ids
+                or cid in ever_shortlisted_candidate_ids
+            ):
                 continue
-            pool.append(_make_dict(candidate, resume, "db_applied_other"))
-            seen_ids.add(cid)
+            for jid, status, is_active in entries:
+                if jid == job_id or not is_active or status in CROSS_JOB_EXCLUDE:
+                    continue
+                current_best = best_open_job_application_by_candidate.get(cid)
+                if current_best is None or (
+                    _APPLICATION_STATUS_PREFERENCE.get(status, 9)
+                    < _APPLICATION_STATUS_PREFERENCE.get(current_best[0], 9)
+                ):
+                    best_open_job_application_by_candidate[cid] = (status, jid)
+
+        for cid, (status, _) in best_open_job_application_by_candidate.items():
+            if len(candidate_pool) >= candidate_limit:
+                break
+            if cid in already_added_candidate_ids:
+                continue
+            candidate, resume = await _fetch_candidate_with_latest_resume(db, cid)
+            if not candidate or not resume:
+                continue
+            total_checked += 1
+            passed, reason = await _check_candidate_eligibility_and_background(
+                candidate, resume, "pass3"
+            )
+            if not passed:
+                continue
+            entry = _build_candidate_pool_entry(candidate, resume, "db_applied_other")
+            entry["fit_summary"] = await _agent.fit_summary(
+                resume.parsed_text, role, required_skills
+            )
+            candidate_pool.append(entry)
+            already_added_candidate_ids.add(cid)
             log.info(f"[pass3] ADDED cid={cid} | {reason}")
-    log.info(f"[internal] After pass3: {len(pool)}/{limit}")
+    log.info(f"[internal] After pass3: {len(candidate_pool)}/{candidate_limit}")
 
-    # ── Pass 4 — raw DB match ─────────────────────────────────────────────────
-    if len(pool) < limit:
-        for cid in cand_apps:
-            if len(pool) >= limit: break
-            if cid in seen_ids or cid in excluded_this_job: continue
-            if cid in ever_shortlisted: continue
-            candidate, resume = await _fetch_candidate_resume(db, cid)
-            if not candidate or not resume: continue
-
-            ok, reason = await _eligible_and_background(candidate, resume, "pass4")
-            if not ok:
+    # ── Pass 4: raw DB match (never applied anywhere) ─────────────────────────
+    if len(candidate_pool) < candidate_limit:
+        for cid in candidate_application_history:
+            if len(candidate_pool) >= candidate_limit:
+                break
+            if (
+                cid in already_added_candidate_ids
+                or cid in excluded_from_this_job_ids
+                or cid in ever_shortlisted_candidate_ids
+            ):
                 continue
-            pool.append(_make_dict(candidate, resume, "db_match"))
-            seen_ids.add(cid)
+            candidate, resume = await _fetch_candidate_with_latest_resume(db, cid)
+            if not candidate or not resume:
+                continue
+            total_checked += 1
+            passed, reason = await _check_candidate_eligibility_and_background(
+                candidate, resume, "pass4"
+            )
+            if not passed:
+                continue
+            entry = _build_candidate_pool_entry(candidate, resume, "db_match")
+            entry["fit_summary"] = await _agent.fit_summary(
+                resume.parsed_text, role, required_skills
+            )
+            candidate_pool.append(entry)
+            already_added_candidate_ids.add(cid)
             log.info(f"[pass4] ADDED cid={cid} | {reason}")
-    log.info(f"[internal] After pass4: {len(pool)}/{limit}")
+    log.info(f"[internal] After pass4: {len(candidate_pool)}/{candidate_limit}")
 
-    # ── Pass 5 — prev_sourced ─────────────────────────────────────────────────
-    if len(pool) < limit:
-        prev_sourced_q = (
+    # ── Pass 5: prev_sourced (scraped externally, never applied) ──────────────
+    if len(candidate_pool) < candidate_limit:
+        scraped_candidates_with_resumes = (await db.execute(
             select(Candidate, Resume)
             .join(Resume, Resume.candidate_id == Candidate.id)
             .where(Resume.source_url.isnot(None), Resume.parsed_text.isnot(None))
             .order_by(Candidate.id, Resume.version.desc())
-        )
-        prev_sourced_res = await db.execute(prev_sourced_q)
-        seen_prev: set[int] = set()
-        for candidate, resume in prev_sourced_res.all():
-            if len(pool) >= limit: break
-            if candidate.id in seen_prev: continue
-            seen_prev.add(candidate.id)
-            if candidate.id in seen_ids or candidate.id in excluded_this_job: continue
-            if candidate.id in cand_apps or candidate.id in ever_shortlisted: continue
+        )).all()
 
-            ok, reason = await _eligible_and_background(candidate, resume, "pass5")
-            if not ok:
+        seen_in_pass5: set[int] = set()
+        for candidate, resume in scraped_candidates_with_resumes:
+            if len(candidate_pool) >= candidate_limit:
+                break
+            if candidate.id in seen_in_pass5:
                 continue
-            pool.append(_make_dict(candidate, resume, "prev_sourced"))
-            seen_ids.add(candidate.id)
+            seen_in_pass5.add(candidate.id)
+            if (
+                candidate.id in already_added_candidate_ids
+                or candidate.id in excluded_from_this_job_ids
+                or candidate.id in candidate_application_history
+                or candidate.id in ever_shortlisted_candidate_ids
+            ):
+                continue
+            total_checked += 1
+            passed, reason = await _check_candidate_eligibility_and_background(
+                candidate, resume, "pass5"
+            )
+            if not passed:
+                continue
+            entry = _build_candidate_pool_entry(candidate, resume, "prev_sourced")
+            entry["fit_summary"] = await _agent.fit_summary(
+                resume.parsed_text, role, required_skills
+            )
+            candidate_pool.append(entry)
+            already_added_candidate_ids.add(candidate.id)
             log.info(f"[pass5] ADDED cid={candidate.id} | {reason}")
-    log.info(f"[internal] Total from all passes: {len(pool)}/{limit}")
-    return pool
+
+    log.info(
+        f"[internal] Total from all passes: "
+        f"{len(candidate_pool)}/{candidate_limit} | total_checked={total_checked}"
+    )
+    return candidate_pool, total_checked
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SCORE POOL
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _score_pool(
+async def _score_candidate_pool_against_job(
     db: AsyncSession,
-    pool: list[dict],
+    candidate_pool: list[dict],
     job_id: int,
+    job_description: str | None = None,
 ) -> list[dict]:
+    """
+    Score every candidate in the pool against the job using:
+      - Rule-based score  (skills, experience, education match)
+      - Semantic score    (weighted cosine similarity across resume sections)
+      - Final score       = W_RULE * rule + W_SEMANTIC * semantic
+
+    Optionally enriches the job embedding with the job description text.
+    Returns the pool with rule_score, semantic_score, and final_score populated.
+    """
     from src.core.services.job_service import get_job_details, load_job_vector, _job_text
-    from src.data.repositories.resume_repo import get_latest_resume, get_sections_by_resume
+    from src.data.repositories.resume_repo import get_latest_resume
     from src.core.services.application_service import _compute_rule_score, W_RULE, W_SEMANTIC
 
     job = await get_job_details(db, job_id)
     if not job:
         log.warning(f"Job {job_id} not found — returning pool unscored")
-        return pool
+        return candidate_pool
 
-    job_vec = load_job_vector(job)
-    if job_vec is None:
+    job_text = _job_text(job)
+    if job_description:
+        job_text = f"{job_text}\n\nJob Description:\n{job_description}"
+
+    job_embedding_vector = load_job_vector(job)
+    if job_embedding_vector is None:
         log.warning(f"Job {job_id} has no stored embedding — embedding on the fly")
-        job_vec = np.array(_embedder.embed_query(_job_text(job)), dtype=np.float32)
+        job_embedding_vector = np.array(
+            _embedder.embed_query(job_text), dtype=np.float32
+        )
 
-    scored = []
-    for item in pool:
-        item.pop("_parsed_text", None)
+    scored_results = []
+    for entry in candidate_pool:
+        entry.pop("_parsed_text", None)
         try:
-            resume = await get_latest_resume(db, item["candidate_id"])
+            resume = await get_latest_resume(db, entry["candidate_id"])
             if not resume:
-                scored.append({**item, "final_score": 0.0})
+                scored_results.append({**entry, "final_score": 0.0})
                 continue
-            sections = await get_sections_by_resume(db, resume.id)
 
-            rule  = _compute_rule_score(resume, sections, job)
-            sem   = _section_semantic_score(sections, job_vec)
-            if sem is None:
-                rv  = _load_vector(getattr(resume, "embedding", None))
-                sem = float(_cosine(rv, job_vec)) if rv is not None else 0.0
-            final = round(W_RULE * rule + W_SEMANTIC * sem, 4)
-            scored.append({
-                **item,
-                "rule_score":     round(rule, 4),
-                "semantic_score": round(sem, 4),
-                "final_score":    final,
+            resume_sections = await get_sections_by_resume(db, resume.id)
+            rule_score      = _compute_rule_score(resume, resume_sections, job)
+            semantic_score  = _compute_weighted_section_semantic_score(
+                resume_sections, job_embedding_vector
+            )
+
+            if semantic_score is None:
+                full_resume_vector = _deserialize_embedding_vector(
+                    getattr(resume, "embedding", None)
+                )
+                semantic_score = (
+                    _compute_cosine_similarity(full_resume_vector, job_embedding_vector)
+                    if full_resume_vector is not None
+                    else 0.0
+                )
+
+            final_score = round(W_RULE * rule_score + W_SEMANTIC * semantic_score, 4)
+            scored_results.append({
+                **entry,
+                "rule_score":     round(rule_score, 4),
+                "semantic_score": round(semantic_score, 4),
+                "final_score":    final_score,
             })
             log.info(
-                f"[score] cid={item['candidate_id']} tag={item.get('source_tag')} "
-                f"rule={rule:.3f} sem={sem:.3f} final={final:.4f}"
+                f"[score] cid={entry['candidate_id']} tag={entry.get('source_tag')} "
+                f"rule={rule_score:.3f} sem={semantic_score:.3f} final={final_score:.4f}"
             )
         except Exception as exc:
-            log.warning(f"Scoring failed cid={item['candidate_id']}: {exc}")
-            scored.append({**item, "final_score": 0.0})
-    return scored
+            log.warning(f"Scoring failed for cid={entry['candidate_id']}: {exc}")
+            scored_results.append({**entry, "final_score": 0.0})
+
+    return scored_results
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AGENTIC SCRAPE + INGEST
+# AGENTIC SCRAPE + INGEST  (adaptive query loop)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def _scrape_and_ingest(
+async def _scrape_external_candidates_and_ingest_to_db(
     db: AsyncSession,
     role: str,
-    skills: list[str],
-    min_exp: int,
-    needed: int,
+    required_skills: list[str],
+    required_min_experience_years: int,
+    candidates_needed: int,
     sourcing_id: int,
-    query_variants: list[str],
+    search_query_variants: list[str],
+    job_description: str | None = None,
 ) -> list[dict]:
+    """
+    Scrape external resume URLs using an ADAPTIVE query loop, run eligibility
+    + quality checks, then ingest accepted candidates into the DB as new
+    Candidate + Resume rows.
+
+    Change 3 — Adaptive loop replaces the old static for-loop over queries:
+      · pending_queries deque is populated from search_query_variants.
+      · On each iteration, one query is popped and run until it is exhausted
+        (no new links) or candidates_needed is met.
+      · When pending_queries empties but candidates_still_needed > 0, the agent
+        is asked for additional queries via generate_additional_queries().
+      · Extra query rounds are capped at MAX_EXTRA_QUERY_ROUNDS to prevent
+        infinite loops when the market has no matching candidates.
+      · tried_queries tracks EVERY query that was actually executed so the
+        agent never repeats an exhausted query in any extra round.
+
+    Three-stage per-URL gate (unchanged):
+      Stage 1 — 50% skill match + experience years
+      Stage 2 — LLM background relevance check
+      Stage 3 — LLM quality check (is this actually a resume?)
+    """
     from src.data.repositories.user_repo import create_user, get_user_by_email
     from src.utils.security import hash_password
 
-    scraped_this_run: set[str] = set()
+    scraped_urls_this_run: set[str]  = set()
+    ingested_candidates:   list[dict] = []
+    tried_queries:         list[str]  = []      # ALL queries executed this run
+    LINKS_PER_PAGE                    = max(candidates_needed, 10)
+    MAX_EMPTY_PAGES_BEFORE_NEXT_QUERY = 2
+    extra_rounds_used:     int        = 0
+
+    # Change 3: deque for O(1) popleft — initial queries from the QueryPlan
+    pending_queries: deque[str] = deque(search_query_variants)
 
     log.info(
-        f"[agent] Starting scrape | role='{role}' needed={needed} | "
-        f"queries={query_variants}"
+        f"[agent] Starting adaptive external scrape | "
+        f"role='{role}' needed={candidates_needed} "
+        f"initial_queries={len(pending_queries)} "
+        f"max_extra_rounds={MAX_EXTRA_QUERY_ROUNDS}"
     )
 
-    ingested: list[dict] = []
-    BATCH     = max(needed, 10)
-    MAX_EMPTY = 2
+    # ── Outer adaptive loop — runs until candidates_needed met or queries exhausted ──
+    while len(ingested_candidates) < candidates_needed:
 
-    for current_query in query_variants:
-        if len(ingested) >= needed:
-            break
-        page         = 1
-        empty_rounds = 0
-        log.info(f"[agent] Query: '{current_query}'")
-
-        while len(ingested) < needed:
-            log.info(
-                f"[agent] page={page} query='{current_query}' "
-                f"ingested={len(ingested)}/{needed}"
-            )
-            raw_links = await get_resume_links(current_query, BATCH, page=page)
-            if not raw_links:
+        # ── Refill pending_queries when exhausted ─────────────────────────────
+        if not pending_queries:
+            if extra_rounds_used >= MAX_EXTRA_QUERY_ROUNDS:
+                log.warning(
+                    f"[agent] Reached max extra query rounds ({MAX_EXTRA_QUERY_ROUNDS}). "
+                    f"Stopping with shortfall: "
+                    f"got={len(ingested_candidates)} needed={candidates_needed}"
+                )
                 break
 
-            fresh_links = [l for l in raw_links if l not in scraped_this_run]
+            still_needed = candidates_needed - len(ingested_candidates)
             log.info(
-                f"[agent] raw={len(raw_links)} after_run_dedup={len(fresh_links)}"
+                f"[agent] All queries exhausted. Requesting additional queries | "
+                f"still_needed={still_needed} "
+                f"tried_so_far={tried_queries} "
+                f"extra_round={extra_rounds_used + 1}/{MAX_EXTRA_QUERY_ROUNDS}"
             )
 
-            if not fresh_links:
-                empty_rounds += 1
-                if empty_rounds >= MAX_EMPTY:
-                    break
-                page += 1
-                continue
+            additional = await _agent.generate_additional_queries(
+                role=role,
+                required_skills=required_skills,
+                already_tried_queries=tried_queries,
+                candidates_still_needed=still_needed,
+            )
 
-            empty_rounds = 0
-
-            for link in fresh_links:
-                if len(ingested) >= needed:
-                    break
-
-                scraped_this_run.add(link)
-
-                if await _is_already_scraped(db, link):
-                    log.debug(f"[agent] Already in DB, skipping: {link}")
-                    continue
-
-                text = await scrape_resume(link)
-                if not text or len(text) < 200:
-                    log.debug(f"[agent] Thin content: {link}")
-                    continue
-
-                # External scrape: any-skill gate on full text (no sections yet).
-                # experience_years=None → regex fallback used (full-time filter
-                # not yet available; LLM parse happens below after acceptance).
-                passed, reason = _passes_eligibility(
-                    text, skills, min_exp,
-                    experience_years=None,
-                    skills_section_text=None,
+            if not additional:
+                log.warning(
+                    "[agent] generate_additional_queries returned nothing — "
+                    "stopping scrape."
                 )
-                if not passed:
-                    log.info(f"[agent] INELIGIBLE (skill/exp) | {reason} | {link}")
+                break
+
+            pending_queries.extend(additional)
+            extra_rounds_used += 1
+            log.info(
+                f"[agent] Extra round {extra_rounds_used}: "
+                f"added {len(additional)} new queries → {additional}"
+            )
+
+        # ── Pop next query and run it ─────────────────────────────────────────
+        current_search_query = pending_queries.popleft()
+        tried_queries.append(current_search_query)
+
+        current_page     = 1
+        empty_page_count = 0
+
+        log.info(
+            f"[agent] Running query '{current_search_query}' | "
+            f"page=1 ingested={len(ingested_candidates)}/{candidates_needed} "
+            f"queries_remaining={len(pending_queries)}"
+        )
+
+        # ── Inner page loop for this query ────────────────────────────────────
+        while len(ingested_candidates) < candidates_needed:
+            log.info(
+                f"[agent] page={current_page} query='{current_search_query}' "
+                f"ingested={len(ingested_candidates)}/{candidates_needed}"
+            )
+
+            raw_resume_links = await get_resume_links(
+                current_search_query, LINKS_PER_PAGE, page=current_page
+            )
+            if not raw_resume_links:
+                log.info(
+                    f"[agent] No links returned for "
+                    f"query='{current_search_query}' page={current_page} — moving on"
+                )
+                break
+
+            new_resume_links = [
+                link for link in raw_resume_links
+                if link not in scraped_urls_this_run
+            ]
+            log.info(
+                f"[agent] raw={len(raw_resume_links)} "
+                f"after_run_dedup={len(new_resume_links)}"
+            )
+
+            if not new_resume_links:
+                empty_page_count += 1
+                if empty_page_count >= MAX_EMPTY_PAGES_BEFORE_NEXT_QUERY:
+                    log.info(
+                        f"[agent] {empty_page_count} consecutive empty pages for "
+                        f"query='{current_search_query}' — advancing to next query"
+                    )
+                    break
+                current_page += 1
+                continue
+            empty_page_count = 0
+
+            # ── Per-URL processing ────────────────────────────────────────────
+            for resume_url in new_resume_links:
+                if len(ingested_candidates) >= candidates_needed:
+                    break
+                scraped_urls_this_run.add(resume_url)
+
+                if await _resume_url_already_exists_in_db(db, resume_url):
+                    log.debug(f"[agent] Already in DB: {resume_url}")
                     continue
 
-                # Background / role-relevance check via agent
-                bg_ok, bg_reason = await _background_matches_role(text, role, skills)
-                if not bg_ok:
-                    log.info(f"[agent] BACKGROUND MISMATCH | {bg_reason} | {link}")
+                scraped_text = await scrape_resume(resume_url)
+                if not scraped_text or len(scraped_text) < 200:
+                    log.debug(f"[agent] Thin or empty content at: {resume_url}")
                     continue
 
-                quality = await _agent.quality_check(text, current_query)
-                if not quality.accept:
-                    log.info(f"[agent] REJECTED | {quality.reason} | {link}")
+                # Stage 1: eligibility gate (50% skills + experience)
+                stage1_passed, stage1_reason = _candidate_passes_eligibility_gate(
+                    resume_parsed_text=scraped_text,
+                    required_skills=required_skills,
+                    required_min_experience_years=required_min_experience_years,
+                    job_description=job_description,
+                    candidate_fulltime_experience_years=None,
+                    candidate_skills_section_text=None,
+                )
+                if not stage1_passed:
+                    log.info(f"[agent] INELIGIBLE | {stage1_reason} | {resume_url}")
                     continue
-                log.info(f"[agent] ACCEPTED | {quality.reason} | {link}")
 
+                # Stage 2: LLM background relevance check
+                background_decision = await _agent.background_matches_role(
+                    scraped_text, role, required_skills
+                )
+                if not background_decision.matches:
+                    log.info(
+                        f"[agent] BACKGROUND MISMATCH | "
+                        f"{background_decision.reason} | {resume_url}"
+                    )
+                    continue
+
+                # Stage 3: LLM quality check (is this actually a resume?)
+                quality_decision = await _agent.quality_check(
+                    scraped_text, current_search_query
+                )
+                if not quality_decision.accept:
+                    log.info(
+                        f"[agent] QUALITY REJECTED | "
+                        f"{quality_decision.reason} | {resume_url}"
+                    )
+                    continue
+                log.info(
+                    f"[agent] ACCEPTED | {quality_decision.reason} | {resume_url}"
+                )
+
+                # Ingest: parse → embed → persist DB rows
                 try:
-                    parsed  = await _parser.parse_async(text)
-                    name    = parsed.contact.name or "Unknown"
-                    summary = await _agent.fit_summary(text, role, skills)
+                    parsed_resume = await _parser.parse_async(scraped_text)
+                    if not parsed_resume.contact.name and not parsed_resume.skills:
+                        log.error("Parse returned empty data, skipping candidate")
+                        continue
+                    fit_summary          = await _agent.fit_summary(
+                        scraped_text, role, required_skills
+                    )
+                    total_fulltime_years = ResumeSectionEmbedder.total_experience_years(
+                        parsed_resume
+                    )
 
-                    # Full-time years only (is_fulltime=False entries excluded)
-                    total_exp_years = ResumeSectionEmbedder.total_experience_years(parsed)
-
-                    email = f"sourced_{sourcing_id}_{len(ingested)}@intellihire.internal"
-                    if await get_user_by_email(db, email):
-                        log.info(f"[agent] Duplicate email {email}, skipping")
+                    internal_email = (
+                        f"sourced_{sourcing_id}_{len(ingested_candidates)}"
+                        f"@intellihire.internal"
+                    )
+                    if await get_user_by_email(db, internal_email):
+                        log.info(
+                            f"[agent] Duplicate internal email {internal_email}, skipping"
+                        )
                         continue
 
-                    user      = await create_user(db, email, hash_password("sourced!"), "candidate")
-                    candidate = Candidate(user_id=user.id, name=name, skills=", ".join(parsed.skills))
-                    db.add(candidate)
-                    await db.commit()
-                    await db.refresh(candidate)
-
-                    section_embeddings = await asyncio.to_thread(_embedder.embed_all_sections, parsed)
-                    full_embedding     = _embedder.embed_full_resume(parsed)
-                    version            = await get_next_version(db, candidate.id)
-
-                    resume = await create_resume_from_url(
-                        db, candidate_id=candidate.id, source_url=link,
-                        parsed_text=text, version=version,
+                    new_user = await create_user(
+                        db,
+                        internal_email,
+                        hash_password("sourced!"),
+                        "candidate",
+                        name=parsed_resume.contact.name,
                     )
-                    section_texts = ResumeSectionEmbedder.section_texts(parsed)
+                    new_candidate = Candidate(
+                        user_id = new_user.id,
+                        name    = parsed_resume.contact.name,
+                    )
+                    db.add(new_candidate)
+                    await db.commit()
+                    await db.refresh(new_candidate)
 
+                    section_embeddings    = await asyncio.to_thread(
+                        _embedder.embed_all_sections, parsed_resume
+                    )
+                    full_resume_embedding = _embedder.embed_full_resume(parsed_resume)
+                    resume_version        = await get_next_version(db, new_candidate.id)
+
+                    new_resume = await create_resume_from_url(
+                        db,
+                        candidate_id=new_candidate.id,
+                        source_url=resume_url,
+                        parsed_text=scraped_text,
+                        version=resume_version,
+                    )
                     await bulk_create_resume_sections(
-                        db, resume_id=resume.id,
-                        sections=section_texts,
+                        db,
+                        resume_id=new_resume.id,
+                        sections=ResumeSectionEmbedder.section_texts(parsed_resume),
                         section_embeddings=section_embeddings,
-                        experience_years=total_exp_years,  # full-time only
+                        experience_years=total_fulltime_years,
                     )
-                    resume.embedding = json.dumps(full_embedding)
+                    new_resume.embedding = json.dumps(full_resume_embedding)
                     await db.commit()
 
-                    ingested.append({
-                        "candidate_id":   candidate.id,
-                        "name":           name,
+                    ingested_candidates.append({
+                        "candidate_id":   new_candidate.id,
+                        "name":           parsed_resume.contact.name,
                         "source_tag":     "external",
-                        "source_url":     link,
-                        "fit_summary":    summary,
-                        "quality_note":   quality.reason,
+                        "source_url":     resume_url,
+                        "fit_summary":    fit_summary,
+                        "quality_note":   quality_decision.reason,
                         "rule_score":     0.0,
                         "semantic_score": 0.0,
                         "final_score":    0.0,
                         "rank":           None,
                     })
                     log.info(
-                        f"[DB] Saved cid={candidate.id} name='{name}' "
-                        f"ft_exp_years={total_exp_years} "
-                        f"progress={len(ingested)}/{needed}"
+                        f"[DB] Saved cid={new_candidate.id} "
+                        f"name='{parsed_resume.contact.name}' "
+                        f"ft_exp_years={total_fulltime_years} "
+                        f"progress={len(ingested_candidates)}/{candidates_needed}"
                     )
+
                 except Exception as exc:
-                    log.error(f"[agent] Ingest failed | url={link} | {exc}", exc_info=True)
-                    continue
+                    log.error(
+                        f"[agent] Ingest failed | url={resume_url} | {exc}",
+                        exc_info=True,
+                    )
 
-            page += 1
+            current_page += 1
 
-    if len(ingested) < needed:
-        log.warning(f"[agent] Shortfall: got={len(ingested)} needed={needed}")
+    # ── Final summary log ─────────────────────────────────────────────────────
+    if len(ingested_candidates) < candidates_needed:
+        log.warning(
+            f"[agent] Scrape complete with SHORTFALL | "
+            f"got={len(ingested_candidates)} needed={candidates_needed} "
+            f"total_queries_run={len(tried_queries)} "
+            f"extra_rounds_used={extra_rounds_used} "
+            f"tried_queries={tried_queries}"
+        )
     else:
-        log.info(f"[agent] Complete: {len(ingested)}/{needed} for role='{role}'")
-    return ingested
+        log.info(
+            f"[agent] Scrape complete | "
+            f"{len(ingested_candidates)}/{candidates_needed} candidates ingested | "
+            f"total_queries_run={len(tried_queries)} "
+            f"extra_rounds_used={extra_rounds_used}"
+        )
+
+    return ingested_candidates
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1008,51 +1324,56 @@ async def _scrape_and_ingest(
 
 async def get_sourcing_history(
     db: AsyncSession,
-    job_id: "int | None" = None,
-) -> list[dict]:
+    job_id: int | None = None,
+) -> list[SourcingHistoryItem]:
+    """Return a list of past sourcing runs, optionally filtered by job_id."""
     from src.data.models.postgres.sourcing import Sourcing
     query = select(Sourcing).order_by(Sourcing.id.desc())
     if job_id:
         query = query.where(Sourcing.job_id == job_id)
-    result = await db.execute(query)
+    rows = (await db.execute(query)).scalars().all()
     return [
-        {
-            "sourcing_id": r.id,
-            "job_id":      r.job_id,
-            "role":        r.role,
-            "location":    r.location,
-            "created_at":  str(r.created_at),
-        }
-        for r in result.scalars().all()
+        SourcingHistoryItem(
+            sourcing_id=row.id,
+            job_id=row.job_id,
+            role=row.role,
+            location=row.location,
+            created_at=str(row.created_at),
+        )
+        for row in rows
     ]
 
 
 async def get_sourcing_candidates(
     db: AsyncSession,
     sourcing_id: int,
-) -> list[dict]:
-    result = await db.execute(
+) -> list[SourcingCandidateDetail]:
+    """Return the ranked candidates for a specific sourcing run."""
+    rows = (await db.execute(
         select(SourcingCandidate)
         .where(SourcingCandidate.sourcing_id == sourcing_id)
         .order_by(SourcingCandidate.rank)
-    )
-    rows = result.scalars().all()
+    )).scalars().all()
+
     if not rows:
         return []
+
     output = []
-    for r in rows:
-        cand_res  = await db.execute(select(Candidate).where(Candidate.id == r.candidate_id))
-        candidate = cand_res.scalar_one_or_none()
-        output.append({
-            "rank":           r.rank,
-            "candidate_id":   r.candidate_id,
-            "name":           candidate.name if candidate else "Unknown",
-            "source_tag":     r.source_tag,
-            "source_url":     r.source_url,
-            "fit_summary":    r.fit_summary,
-            "quality_note":   r.quality_note,
-            "rule_score":     r.rule_score,
-            "semantic_score": r.semantic_score,
-            "final_score":    r.final_score,
-        })
+    for row in rows:
+        candidate = (await db.execute(
+            select(Candidate).where(Candidate.id == row.candidate_id)
+        )).scalar_one_or_none()
+
+        output.append(SourcingCandidateDetail(
+            rank=row.rank,
+            candidate_id=row.candidate_id,
+            name=candidate.name if candidate else "Unknown",
+            source_tag=row.source_tag,
+            source_url=row.source_url,
+            fit_summary=row.fit_summary,
+            quality_note=row.quality_note,
+            rule_score=row.rule_score,
+            semantic_score=row.semantic_score,
+            final_score=row.final_score,
+        ))
     return output

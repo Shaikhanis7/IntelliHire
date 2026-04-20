@@ -16,6 +16,10 @@ import SourcingPage         from '../pages/SourcingPage';
 import CompanyProfilePage   from '../pages/CompanyProfilePage';
 import LandingPage          from '../pages/LandingPage';
 import CandidateDashboard   from '../pages/CandidateDashboard';
+import ManageRecruitersPage from '../pages/ManageRecruitersPage';
+import ManageCandidatesPage from '../pages/ManageCandidatesPage';
+import AdminSourcingPage    from '../pages/AdminSourcingPage';
+// import ManageUsersPage   from '../pages/ManageUsersPage';
 
 import type { RootState } from '../app/store';
 
@@ -56,10 +60,9 @@ export const router = createBrowserRouter([
       {
         element: <DashboardLayout />,
         children: [
-          // /dashboard — entry point for all authenticated users
           { path: 'dashboard', element: <RoleDashboard /> },
 
-          // Shared routes (all authenticated roles)
+          // Shared routes
           { path: 'jobs',     element: <JobPostingsPage /> },
           { path: 'jobs/:id', element: <JobDetailsPage /> },
 
@@ -106,6 +109,33 @@ export const router = createBrowserRouter([
               </ProtectedRoute>
             ),
           },
+
+          // ── Admin-only ──────────────────────────────────────────────────
+          {
+            path: 'manage-recruiters',
+            element: (
+              <ProtectedRoute role="admin" unauthorizedRedirect="/dashboard">
+                <ManageRecruitersPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'manage-candidates',
+            element: (
+              <ProtectedRoute role="admin" unauthorizedRedirect="/dashboard">
+                <ManageCandidatesPage />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: 'admin/sourcing',
+            element: (
+              <ProtectedRoute role="admin" unauthorizedRedirect="/dashboard">
+                <AdminSourcingPage />
+              </ProtectedRoute>
+            ),
+          },
+
         ],
       },
     ],

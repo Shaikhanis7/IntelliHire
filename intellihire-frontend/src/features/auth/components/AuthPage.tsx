@@ -3,8 +3,9 @@
 // Fonts: DM Sans (body) + Fraunces (display)
 // Motion: Framer Motion — panel slide, staggered reveals, shake on error
 // Responsive: mobile-first, single-column < 640px, split-panel ≥ 880px
+// Change: ErrorBanner removed → toast notifications via useToast + ToastContainer
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,7 +14,7 @@ import { motion, AnimatePresence, useAnimation } from 'framer-motion';
 import {
   Mail, Lock, User, Eye, EyeOff, ArrowRight,
   Sparkles, Shield, Zap, Users, Briefcase,
-  AlertCircle, CheckCircle2, ChevronLeft,
+  AlertCircle, CheckCircle2, X, ChevronLeft,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -61,6 +62,111 @@ const C = {
   shadowLg:     '0 20px 60px rgba(15,23,42,0.14), 0 4px 16px rgba(15,23,42,0.08)',
 };
 
+/* ─── Toast system ───────────────────────────────────────────────────────────── */
+type ToastType = 'error' | 'success';
+interface ToastItem { id: number; type: ToastType; message: string; }
+
+let _toastId = 0;
+const TOAST_DURATION = 4500;
+
+function useToast() {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const showToast = useCallback((type: ToastType, message: string) => {
+    const id = ++_toastId;
+    setToasts(prev => [{ id, type, message }, ...prev]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, TOAST_DURATION);
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  return { toasts, showToast, removeToast };
+}
+
+const ToastContainer: React.FC<{
+  toasts: ToastItem[];
+  onRemove: (id: number) => void;
+}> = ({ toasts, onRemove }) => (
+  <div style={{
+    position: 'fixed',
+    top: 16,
+    right: 16,
+    zIndex: 9999,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+    maxWidth: 360,
+    width: 'calc(100% - 32px)',
+    pointerEvents: 'none',
+  }}>
+    <AnimatePresence>
+      {toasts.map(t => (
+        <motion.div
+          key={t.id}
+          initial={{ opacity: 0, y: -12, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -8, scale: 0.97 }}
+          transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: '12px 14px',
+            borderRadius: 12,
+            fontSize: 13,
+            lineHeight: 1.5,
+            fontFamily: "'DM Sans', system-ui, sans-serif",
+            fontWeight: 500,
+            boxShadow: '0 4px 20px rgba(15,23,42,0.13), 0 1px 4px rgba(15,23,42,0.08)',
+            pointerEvents: 'auto',
+            background: t.type === 'error' ? '#FCEBEB' : '#EAF3DE',
+            border: `1px solid ${t.type === 'error' ? '#F7C1C1' : '#C0DD97'}`,
+            color: t.type === 'error' ? '#501313' : '#173404',
+          }}
+        >
+          {t.type === 'error'
+            ? <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            : <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+          }
+          <span style={{ flex: 1 }}>{t.message}</span>
+          <motion.button
+            whileHover={{ opacity: 0.8 }}
+            onClick={() => onRemove(t.id)}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              opacity: 0.4, padding: 0, color: 'inherit',
+              display: 'flex', alignItems: 'center', flexShrink: 0,
+            }}
+          >
+            <X size={13} />
+          </motion.button>
+
+          {/* Progress bar */}
+          <motion.div
+            initial={{ scaleX: 1 }}
+            animate={{ scaleX: 0 }}
+            transition={{ duration: TOAST_DURATION / 1000, ease: 'linear' }}
+            style={{
+              position: 'absolute',
+              bottom: 0, left: 0,
+              height: 2,
+              width: '100%',
+              borderRadius: '0 0 12px 12px',
+              background: t.type === 'error' ? '#A32D2D' : '#3B6D11',
+              opacity: 0.25,
+              transformOrigin: 'left',
+            }}
+          />
+        </motion.div>
+      ))}
+    </AnimatePresence>
+  </div>
+);
+
 /* ─── Error lookup tables ────────────────────────────────────────────────────── */
 const LOGIN_ERRORS: Array<[string, string]> = [
   ['invalid email or password', 'Incorrect email or password. Please try again.'],
@@ -85,8 +191,8 @@ function friendlyMessage(
   error: string | null,
   table: Array<[string, string]>,
   fallback: string,
-): string | null {
-  if (!error) return null;
+): string {
+  if (!error) return fallback;
   const lower = error.toLowerCase();
   for (const [key, msg] of table) {
     if (lower.includes(key)) return msg;
@@ -198,32 +304,14 @@ const Field: React.FC<FieldProps> = ({
   );
 };
 
-/* ─── Error banner ───────────────────────────────────────────────────────────── */
-const ErrorBanner: React.FC<{ message: string }> = ({ message }) => (
-  <motion.div
-    initial={{ opacity: 0, y: -8, scale: 0.97 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.97 }}
-    transition={{ duration: 0.25 }}
-    style={{
-      padding: '11px 14px',
-      background: C.errorDim,
-      border: `1px solid ${C.errorBorder}`,
-      borderRadius: 10,
-      color: C.error,
-      fontSize: 13,
-      marginBottom: 16,
-      display: 'flex', alignItems: 'flex-start', gap: 9,
-      fontWeight: 500,
-    }}
-  >
-    <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-    <span>{message}</span>
-  </motion.div>
-);
-
 /* ─── Login form ─────────────────────────────────────────────────────────────── */
-const LoginForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSwitch, isMobile }) => {
+interface LoginFormProps {
+  onSwitch: () => void;
+  isMobile: boolean;
+  onToast: (type: ToastType, message: string) => void;
+}
+
+const LoginForm: React.FC<LoginFormProps> = ({ onSwitch, isMobile, onToast }) => {
   const { login, isLoading, error, clearError } = useAuth();
   const navigate  = useNavigate();
   const [showPw, setShowPw] = useState(false);
@@ -234,25 +322,24 @@ const LoginForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSw
 
   useEffect(() => () => clearError(), [clearError]);
 
-  const friendlyError = friendlyMessage(
-    error, LOGIN_ERRORS, 'Sign in failed. Please check your credentials and try again.',
-  );
-
   const onSubmit = async (data: LoginData) => {
     try {
       await login(data);
+      onToast('success', 'Welcome back! Signing you in…');
       navigate('/dashboard');
     } catch {
+      const msg = friendlyMessage(
+        error,
+        LOGIN_ERRORS,
+        'Sign in failed. Please check your credentials and try again.',
+      );
+      onToast('error', msg);
       controls.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.5 } });
     }
   };
 
   return (
     <motion.form animate={controls} onSubmit={handleSubmit(onSubmit)}>
-      <AnimatePresence>
-        {friendlyError && <ErrorBanner message={friendlyError} />}
-      </AnimatePresence>
-
       <Field label="Email address" type="email" placeholder="you@company.com"
         icon={<Mail size={14} />} error={errors.email?.message}
         registration={register('email')} />
@@ -316,7 +403,13 @@ const LoginForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSw
 };
 
 /* ─── Signup form ────────────────────────────────────────────────────────────── */
-const SignupForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onSwitch, isMobile }) => {
+interface SignupFormProps {
+  onSwitch: () => void;
+  isMobile: boolean;
+  onToast: (type: ToastType, message: string) => void;
+}
+
+const SignupForm: React.FC<SignupFormProps> = ({ onSwitch, isMobile, onToast }) => {
   const { register: registerUser, isLoading, error, clearError } = useAuth();
   const navigate  = useNavigate();
   const [showPw, setShowPw] = useState(false);
@@ -328,26 +421,25 @@ const SignupForm: React.FC<{ onSwitch: () => void; isMobile: boolean }> = ({ onS
 
   useEffect(() => () => clearError(), [clearError]);
 
-  const friendlyError = friendlyMessage(
-    error, SIGNUP_ERRORS, 'Registration failed. Please try again.',
-  );
-
   const onSubmit = async (data: SignupData) => {
     try {
       const { confirmPassword, ...rest } = data;
       await registerUser(rest);
+      onToast('success', 'Account created! Welcome to IntelliHire.');
       navigate('/dashboard');
     } catch {
+      const msg = friendlyMessage(
+        error,
+        SIGNUP_ERRORS,
+        'Registration failed. Please try again.',
+      );
+      onToast('error', msg);
       controls.start({ x: [0, -8, 8, -6, 6, -3, 3, 0], transition: { duration: 0.5 } });
     }
   };
 
   return (
     <motion.form animate={controls} onSubmit={handleSubmit(onSubmit)}>
-      <AnimatePresence>
-        {friendlyError && <ErrorBanner message={friendlyError} />}
-      </AnimatePresence>
-
       <Field label="Full name" placeholder="Jane Smith" icon={<User size={14} />}
         error={errors.name?.message} registration={register('name')} />
       <Field label="Email address" type="email" placeholder="you@company.com"
@@ -421,7 +513,7 @@ const Divider: React.FC<{ text: string }> = ({ text }) => (
   </div>
 );
 
-/* ─── Mobile header bar (replaces the navy panel on small screens) ───────────── */
+/* ─── Mobile header bar ──────────────────────────────────────────────────────── */
 const MobileHeader: React.FC<{ isLogin: boolean }> = ({ isLogin }) => (
   <div style={{
     background: C.gradPanel,
@@ -534,6 +626,7 @@ export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin]           = useState(true);
   const [panelIsLogin, setPanelIsLogin] = useState(true);
   const width = useWindowWidth();
+  const { toasts, showToast, removeToast } = useToast();
 
   const isMobile = width < BP.sm;
   const isTablet = width >= BP.sm && width < BP.md;
@@ -543,7 +636,6 @@ export const AuthPage: React.FC = () => {
     setIsLogin(v => !v);
   };
 
-  // ── Padding based on viewport ──
   const formPadH  = isMobile ? 24 : isTablet ? 28 : 38;
   const formPadV  = isMobile ? 28 : 36;
   const panelPad  = isTablet ? '32px 28px' : '40px 36px';
@@ -555,7 +647,7 @@ export const AuthPage: React.FC = () => {
     ? 'min(700px, calc(100vh - 40px))'
     : 'min(660px, calc(100vh - 40px))';
 
-  /* ── Mobile layout — single column, stacked ── */
+  /* ── Mobile layout ── */
   if (isMobile) {
     return (
       <div style={{
@@ -571,10 +663,11 @@ export const AuthPage: React.FC = () => {
           input::placeholder { color: #c1cada; }
         `}</style>
 
-        {/* Navy top bar */}
+        {/* Global toast container */}
+        <ToastContainer toasts={toasts} onRemove={removeToast} />
+
         <MobileHeader isLogin={isLogin} />
 
-        {/* Form area */}
         <div style={{ flex: 1, overflowY: 'auto', background: C.surface, padding: `${formPadV}px ${formPadH}px` }}>
           <AnimatePresence mode="wait">
             {isLogin ? (
@@ -585,7 +678,7 @@ export const AuthPage: React.FC = () => {
                   <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 4, fontFamily: "'Fraunces', serif" }}>Welcome back</h2>
                   <p style={{ fontSize: 13.5, color: C.textMuted, margin: 0 }}>Sign in to your account</p>
                 </div>
-                <LoginForm onSwitch={switchMode} isMobile />
+                <LoginForm onSwitch={switchMode} isMobile onToast={showToast} />
               </motion.div>
             ) : (
               <motion.div key="signup-mobile"
@@ -595,7 +688,7 @@ export const AuthPage: React.FC = () => {
                   <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 4, fontFamily: "'Fraunces', serif" }}>Create Account</h2>
                   <p style={{ fontSize: 13.5, color: C.textMuted, margin: 0 }}>Join IntelliHire today</p>
                 </div>
-                <SignupForm onSwitch={switchMode} isMobile />
+                <SignupForm onSwitch={switchMode} isMobile onToast={showToast} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -604,7 +697,7 @@ export const AuthPage: React.FC = () => {
     );
   }
 
-  /* ── Tablet / Desktop layout — split panel card ── */
+  /* ── Tablet / Desktop layout ── */
   return (
     <div style={{
       minHeight: '100vh',
@@ -631,6 +724,9 @@ export const AuthPage: React.FC = () => {
           70%      { transform: translate(40px,-25px) scale(0.9); opacity:0.4; }
         }
       `}</style>
+
+      {/* Global toast container */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       {/* Background blobs */}
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
@@ -670,7 +766,7 @@ export const AuthPage: React.FC = () => {
               <h2 style={{ fontSize: isTablet ? 20 : 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Create Account</h2>
               <p style={{ fontSize: 13.5, color: C.textMuted }}>Join IntelliHire today</p>
             </div>
-            <SignupForm onSwitch={switchMode} isMobile={false} />
+            <SignupForm onSwitch={switchMode} isMobile={false} onToast={showToast} />
           </motion.div>
         </div>
 
@@ -690,7 +786,7 @@ export const AuthPage: React.FC = () => {
               <h2 style={{ fontSize: isTablet ? 20 : 24, fontWeight: 800, color: C.text, letterSpacing: '-0.5px', marginBottom: 5, fontFamily: "'Fraunces', serif" }}>Welcome back</h2>
               <p style={{ fontSize: 13.5, color: C.textMuted }}>Sign in to your account</p>
             </div>
-            <LoginForm onSwitch={switchMode} isMobile={false} />
+            <LoginForm onSwitch={switchMode} isMobile={false} onToast={showToast} />
           </motion.div>
         </div>
 

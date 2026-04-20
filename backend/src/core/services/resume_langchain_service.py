@@ -1,17 +1,33 @@
 """
 src/core/services/resume_langchain_service.py
 
-LangChain-powered resume section extraction + embedding generation.
-Uses Groq as the LLM backend (ultra-fast inference via groq API).
+LangChain-powered resume section extraction and embedding generation.
+Uses Groq as the LLM backend (ultra-fast inference via Groq API) and
+Google gemini-embedding-001 for 768-dimensional vector embeddings.
 
-Changes (full-time experience update):
-  - ExperienceEntry: added `is_fulltime: bool = True` — LLM classifies each
-    role as full-time or not (intern, freelance, contract, part-time, etc.).
-  - _SYSTEM_PROMPT: instructs LLM to populate is_fulltime and years ONLY for
-    full-time roles (internships/part-time/freelance → years=0, is_fulltime=False).
-  - ResumeSectionEmbedder.total_experience_years(): sums ONLY full-time entries.
-  - section_texts(): experience section text prioritises full-time roles,
-    placing them first so embeddings give them higher weight.
+Architecture
+────────────
+  LangChainResumeParser     — LLM-based structured extraction from raw resume text
+  ResumeSectionEmbedder     — per-section and full-resume embedding generation
+  ResumeFileExtractor       — binary file → plain text (PDF / DOCX / TXT)
+
+Full-time experience handling
+─────────────────────────────
+  ExperienceEntry.is_fulltime: bool
+    The LLM classifies each role as full-time (True) or not (False).
+    Internships, part-time, freelance, volunteer, contract-part-time → False.
+
+  ExperienceEntry.years: int
+    Total years for THIS role. Set to 0 when is_fulltime=False.
+    The LLM derives this from the duration string (e.g. "Jan 2019 – Mar 2023" → 4).
+
+  ResumeSectionEmbedder.total_experience_years(parsed)
+    Sums ONLY full-time entries. Returns None when no reliable data exists
+    (callers fall back to regex on parsed_text in that case).
+
+  ResumeSectionEmbedder.section_texts(parsed) — experience ordering:
+    1. Full-time roles first (bullets included) → higher embedding weight
+    2. Non-full-time roles appended (title + company only) → lower weight
 """
 
 from __future__ import annotations
@@ -33,7 +49,7 @@ log = setup_logger()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 1.  PYDANTIC SCHEMA  — defines the JSON the LLM must return
+# PYDANTIC SCHEMA  — defines the JSON the LLM must return
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ContactInfo(BaseModel):
@@ -90,7 +106,7 @@ class ParsedResumeSchema(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 2.  PROMPT TEMPLATE
+# PROMPT TEMPLATE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _SYSTEM_PROMPT = """You are a precise resume parser.
@@ -133,13 +149,21 @@ _HUMAN_PROMPT = """Resume text:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3.  LANGCHAIN RESUME PARSER SERVICE
+# LANGCHAIN RESUME PARSER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LangChainResumeParser:
     """
-    Uses Groq via LangChain to extract structured resume sections.
-    Groq provides near-instant inference — ideal for resume pipelines.
+    Extracts structured resume data from raw text using Groq + LangChain.
+
+    Uses llama-3.3-70b-versatile via Groq for near-instant inference.
+    Returns a ParsedResumeSchema Pydantic model on success, or an empty
+    ParsedResumeSchema on LLM failure (fail-safe, never raises).
+
+    Usage:
+        parser = LangChainResumeParser(groq_api_key)
+        parsed = await parser.parse_async(raw_text)    # inside FastAPI
+        parsed = parser.parse_sync(raw_text)           # from CLI / workers
     """
 
     DEFAULT_MODEL = "llama-3.3-70b-versatile"
@@ -155,44 +179,77 @@ class LangChainResumeParser:
             temperature=temperature,
             api_key=groq_api_key,
         )
-        self._parser = JsonOutputParser(pydantic_object=ParsedResumeSchema)
-        self._chain  = self._build_chain()
+        self._output_parser = JsonOutputParser(pydantic_object=ParsedResumeSchema)
+        self._chain         = self._build_extraction_chain()
 
-    def _build_chain(self):
+    def _build_extraction_chain(self):
+        """Assemble the LangChain prompt → LLM → JSON parser chain."""
         prompt = ChatPromptTemplate.from_messages([
             ("system", _SYSTEM_PROMPT),
             ("human",  _HUMAN_PROMPT),
-        ]).partial(format_instructions=self._parser.get_format_instructions())
-        return prompt | self._llm | self._parser
+        ]).partial(format_instructions=self._output_parser.get_format_instructions())
+        return prompt | self._llm | self._output_parser
+    
+    from tenacity import retry, stop_after_attempt, wait_exponential
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=60, max=300),
+        retry_error_callback=lambda retry_state: ParsedResumeSchema()
+    )
     async def parse_async(self, resume_text: str) -> ParsedResumeSchema:
-        """Async parse — use inside FastAPI route handlers."""
+        """
+        Async parse — use inside FastAPI route handlers and background tasks.
+        Truncates input to 6000 chars to stay within token limits.
+        Returns an empty ParsedResumeSchema on any LLM or parsing error.
+        """
         try:
             raw: dict = await self._chain.ainvoke({"resume_text": resume_text[:6000]})
             return ParsedResumeSchema(**raw)
-        except Exception as e:
-            log.error(f"LangChain parse failed: {e}")
+        except Exception as exc:
+            log.error(f"LangChainResumeParser.parse_async failed: {exc}")
             return ParsedResumeSchema()
 
     def parse_sync(self, resume_text: str) -> ParsedResumeSchema:
-        """Sync parse — use from background workers / CLI."""
+        """
+        Sync parse — use from background workers, CLI scripts, or Celery tasks.
+        Truncates input to 6000 chars to stay within token limits.
+        Returns an empty ParsedResumeSchema on any LLM or parsing error.
+        """
         try:
             raw: dict = self._chain.invoke({"resume_text": resume_text[:6000]})
             return ParsedResumeSchema(**raw)
-        except Exception as e:
-            log.error(f"LangChain parse failed: {e}")
+        except Exception as exc:
+            log.error(f"LangChainResumeParser.parse_sync failed: {exc}")
             return ParsedResumeSchema()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4.  EMBEDDING SERVICE  (Google gemini-embedding-001, 768-dim)
+# RESUME SECTION EMBEDDER  (Google gemini-embedding-001, 768-dim)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ResumeSectionEmbedder:
     """
-    Generates embeddings via Google's gemini-embedding-001 model.
+    Generates 768-dimensional embeddings via Google's gemini-embedding-001 model.
+
+    Two task types are used:
+      RETRIEVAL_DOCUMENT — for resume content being indexed
+      RETRIEVAL_QUERY    — for recruiter search queries being matched
+
     Full-time experience entries are placed first in the experience section
     text so the resulting embedding gives them naturally higher weight.
+
+    Usage:
+        embedder = ResumeSectionEmbedder()
+
+        # All sections at once (batched, most efficient)
+        section_vectors = embedder.embed_all_sections(parsed)
+
+        # Full-resume single vector
+        full_vector = embedder.embed_full_resume(parsed)
+
+        # Query embedding for semantic search
+        query_vector = embedder.embed_query("senior python backend engineer")
     """
 
     MODEL_NAME = "gemini-embedding-001"
@@ -204,9 +261,9 @@ class ResumeSectionEmbedder:
         task_type: str = "RETRIEVAL_DOCUMENT",
     ):
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
-        self._embeddings = GoogleGenerativeAIEmbeddings(
+        self._document_embeddings = GoogleGenerativeAIEmbeddings(
             model=self.MODEL_NAME,
-            task_type=task_type,
+            task_type="RETRIEVAL_DOCUMENT",
             google_api_key=google_api_key,
         )
         self._query_embeddings = GoogleGenerativeAIEmbeddings(
@@ -216,64 +273,66 @@ class ResumeSectionEmbedder:
         )
         log.info("ResumeSectionEmbedder: Google gemini-embedding-001 ready ✓")
 
-    # ── experience years (full-time only) ─────────────────────────────────────
+    # ── Experience year helpers ───────────────────────────────────────────────
 
     @staticmethod
     def total_experience_years(parsed: ParsedResumeSchema) -> int | None:
         """
-        Sums LLM-extracted years across FULL-TIME experience entries only.
-        Internships, part-time, freelance, etc. (is_fulltime=False) are excluded.
+        Sum LLM-extracted years across FULL-TIME experience entries only.
+
+        Internships, part-time, freelance etc. (is_fulltime=False) are excluded.
 
         Returns:
-          int  — total full-time years when at least one entry has years > 0
-          None — no reliable full-time duration data from LLM;
-                 callers should fall back to regex on parsed_text.
+            int  — total full-time years when at least one entry has years > 0
+            None — no reliable full-time duration data from the LLM;
+                   callers should fall back to regex on parsed_text.
         """
         fulltime_years = [
-            e.years
-            for e in parsed.experience
-            if e.is_fulltime and e.years > 0
+            entry.years
+            for entry in parsed.experience
+            if entry.is_fulltime and entry.years > 0
         ]
         if not fulltime_years:
             return None
         return sum(fulltime_years)
 
     @staticmethod
-    def fulltime_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
-        """Returns only the full-time experience entries, sorted newest-first."""
-        return [e for e in parsed.experience if e.is_fulltime]
+    def fulltime_experience_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
+        """Return only the full-time experience entries (newest-first order preserved)."""
+        return [entry for entry in parsed.experience if entry.is_fulltime]
 
     @staticmethod
-    def non_fulltime_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
-        """Returns internships, part-time, freelance etc."""
-        return [e for e in parsed.experience if not e.is_fulltime]
+    def non_fulltime_experience_entries(parsed: ParsedResumeSchema) -> list[ExperienceEntry]:
+        """Return internships, part-time, freelance, and other non-full-time entries."""
+        return [entry for entry in parsed.experience if not entry.is_fulltime]
 
-    # ── section text helpers ──────────────────────────────────────────────────
+    # ── Section text builders ─────────────────────────────────────────────────
 
     @staticmethod
     def section_texts(parsed: ParsedResumeSchema) -> dict[str, str]:
         """
-        Builds plain-text representations of each resume section for embedding.
+        Build plain-text representations of each resume section for embedding.
 
-        Experience section ordering:
-          1. Full-time roles first (higher embedding weight)
-          2. Non-full-time roles appended after (still present, lower weight)
+        Experience section ordering (ensures full-time roles dominate the vector):
+          1. Full-time roles — title + company + all bullets
+          2. Non-full-time roles — title + company only (no bullets)
+
+        Returns a dict of {section_name: text_content}.
+        Sections with no content are still included (empty string) so callers
+        can iterate consistently.
         """
-        fulltime     = ResumeSectionEmbedder.fulltime_entries(parsed)
-        non_fulltime = ResumeSectionEmbedder.non_fulltime_entries(parsed)
+        fulltime_entries     = ResumeSectionEmbedder.fulltime_experience_entries(parsed)
+        non_fulltime_entries = ResumeSectionEmbedder.non_fulltime_experience_entries(parsed)
 
-        # Full-time entries get their bullets included; non-full-time get title+company only
         fulltime_text = " ".join(
             f"{e.title} {e.company} {' '.join(e.bullets)}"
-            for e in fulltime
+            for e in fulltime_entries
         )
         non_fulltime_text = " ".join(
             f"{e.title} {e.company}"
-            for e in non_fulltime
+            for e in non_fulltime_entries
         )
-        experience_text = " ".join(
-            filter(None, [fulltime_text, non_fulltime_text])
-        )
+        experience_text = " ".join(filter(None, [fulltime_text, non_fulltime_text]))
 
         return {
             "summary": parsed.summary,
@@ -289,85 +348,141 @@ class ResumeSectionEmbedder:
             ),
         }
 
-    # ── single text embedding ─────────────────────────────────────────────────
+    # ── Single text embedding ─────────────────────────────────────────────────
 
-    def embed(self, text: str, is_query: bool = False) -> list[float]:
+    def embed_text(self, text: str, is_query: bool = False) -> list[float]:
+        """
+        Embed a single text string.
+
+        Args:
+            text:     Text to embed.
+            is_query: True → use RETRIEVAL_QUERY task type (for search queries).
+                      False → use RETRIEVAL_DOCUMENT task type (for resume content).
+
+        Returns a zero vector of VECTOR_DIM if the text is empty or embedding fails.
+        """
         if not text or not text.strip():
-            return self._zeros()
+            return self._zero_vector()
         try:
-            client = self._query_embeddings if is_query else self._embeddings
+            client = self._query_embeddings if is_query else self._document_embeddings
             return client.embed_query(text)
-        except Exception as e:
-            log.error(f"Google embedding failed: {e}")
-            return self._zeros()
+        except Exception as exc:
+            log.error(f"ResumeSectionEmbedder.embed_text failed: {exc}")
+            return self._zero_vector()
 
-    # ── batch embedding for all sections ─────────────────────────────────────
+    # ── Batch section embedding ───────────────────────────────────────────────
 
     def embed_all_sections(
-        self, parsed: ParsedResumeSchema
+        self,
+        parsed: ParsedResumeSchema,
     ) -> dict[str, list[float]]:
-        sections = {
-            sec: txt
-            for sec, txt in self.section_texts(parsed).items()
-            if txt.strip()
+        """
+        Embed all non-empty resume sections in a single batched API call.
+
+        Returns {section_name: embedding_vector}.
+        Empty sections are excluded from the batch. On error, returns zero
+        vectors for all sections that were attempted.
+        """
+        non_empty_sections = {
+            section_name: section_text
+            for section_name, section_text in self.section_texts(parsed).items()
+            if section_text.strip()
         }
-        if not sections:
+        if not non_empty_sections:
             return {}
         try:
-            texts   = list(sections.values())
-            keys    = list(sections.keys())
-            vectors = self._embeddings.embed_documents(texts)
-            return dict(zip(keys, vectors))
-        except Exception as e:
-            log.error(f"Google batch embedding failed: {e}")
-            return {sec: self._zeros() for sec in sections}
+            section_names   = list(non_empty_sections.keys())
+            section_texts   = list(non_empty_sections.values())
+            embedding_vectors = self._document_embeddings.embed_documents(section_texts)
+            return dict(zip(section_names, embedding_vectors))
+        except Exception as exc:
+            log.error(f"ResumeSectionEmbedder.embed_all_sections failed: {exc}")
+            return {name: self._zero_vector() for name in non_empty_sections}
 
     def embed_full_resume(self, parsed: ParsedResumeSchema) -> list[float]:
-        all_text = " ".join(
-            t for t in self.section_texts(parsed).values() if t.strip()
-        )
-        return self.embed(all_text)
+        """
+        Produce a single embedding vector representing the entire resume.
 
-    def embed_query(self, query: str) -> list[float]:
-        """Embed a recruiter search query with RETRIEVAL_QUERY task type."""
-        return self.embed(query, is_query=True)
+        Concatenates all section texts and embeds as one document.
+        Used as a fallback when per-section embeddings are unavailable.
+        """
+        all_section_text = " ".join(
+            text for text in self.section_texts(parsed).values() if text.strip()
+        )
+        return self.embed_text(all_section_text)
+
+    def embed_query(self, query_text: str) -> list[float]:
+        """
+        Embed a recruiter search query using the RETRIEVAL_QUERY task type.
+
+        This produces vectors optimised for matching against document vectors
+        (asymmetric retrieval), which is more accurate than using the same
+        task type for both queries and documents.
+        """
+        return self.embed_text(query_text, is_query=True)
 
     @staticmethod
-    def _zeros() -> list[float]:
+    def _zero_vector() -> list[float]:
+        """Return a zero vector of the model's output dimensionality."""
         return [0.0] * ResumeSectionEmbedder.VECTOR_DIM
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5.  FILE TEXT EXTRACTOR  (PDF / DOCX / TXT)
+# RESUME FILE TEXT EXTRACTOR  (PDF / DOCX / plain text)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class ResumeFileExtractor:
+    """
+    Convert uploaded resume files to plain text strings.
+
+    Supported formats:
+      .pdf  — extracted via PyPDF2 (page-by-page text)
+      .docx — extracted via python-docx (paragraph-by-paragraph)
+      other — decoded as UTF-8 (plain text files, .txt, etc.)
+
+    All methods are static — no instantiation required.
+
+    Usage:
+        raw_text = ResumeFileExtractor.extract(file_bytes, "resume.pdf")
+    """
 
     @staticmethod
     def extract(file_bytes: bytes, filename: str) -> str:
-        name = filename.lower()
-        if name.endswith(".pdf"):
-            return ResumeFileExtractor._from_pdf(file_bytes)
-        if name.endswith(".docx"):
-            return ResumeFileExtractor._from_docx(file_bytes)
+        """
+        Dispatch to the correct extractor based on the file extension.
+
+        Args:
+            file_bytes: Raw bytes from the uploaded file.
+            filename:   Original filename including extension.
+
+        Returns:
+            Extracted plain text, or an empty string on failure.
+        """
+        lowered = filename.lower()
+        if lowered.endswith(".pdf"):
+            return ResumeFileExtractor._extract_pdf_text(file_bytes)
+        if lowered.endswith(".docx"):
+            return ResumeFileExtractor._extract_docx_text(file_bytes)
         return file_bytes.decode("utf-8", errors="ignore")
 
     @staticmethod
-    def _from_pdf(data: bytes) -> str:
+    def _extract_pdf_text(pdf_bytes: bytes) -> str:
+        """Extract text from a PDF file using PyPDF2, joining all pages."""
         try:
             import PyPDF2
-            reader = PyPDF2.PdfReader(io.BytesIO(data))
-            return "\n".join(p.extract_text() or "" for p in reader.pages)
-        except Exception as e:
-            log.error(f"PDF extract failed: {e}")
+            reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as exc:
+            log.error(f"ResumeFileExtractor._extract_pdf_text failed: {exc}")
             return ""
 
     @staticmethod
-    def _from_docx(data: bytes) -> str:
+    def _extract_docx_text(docx_bytes: bytes) -> str:
+        """Extract text from a DOCX file using python-docx, joining all paragraphs."""
         try:
             from docx import Document
-            doc = Document(io.BytesIO(data))
-            return "\n".join(p.text for p in doc.paragraphs)
-        except Exception as e:
-            log.error(f"DOCX extract failed: {e}")
+            document = Document(io.BytesIO(docx_bytes))
+            return "\n".join(paragraph.text for paragraph in document.paragraphs)
+        except Exception as exc:
+            log.error(f"ResumeFileExtractor._extract_docx_text failed: {exc}")
             return ""

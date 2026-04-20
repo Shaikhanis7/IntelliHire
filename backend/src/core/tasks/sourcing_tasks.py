@@ -21,6 +21,7 @@ async def source_candidates_task(
     count: int,
     mode: str,
     sourcing_id: int,
+    triggered_by: int | None = None,   # ← added
 ) -> None:
     """
     Async background task — drop-in replacement for the Celery task.
@@ -32,7 +33,7 @@ async def source_candidates_task(
     Usage (in router):
         background_tasks.add_task(
             source_candidates_task,
-            job_id, role, skills, min_exp, count, mode, sourcing.id,
+            job_id, role, skills, min_exp, count, mode, sourcing.id, triggered_by,
         )
     """
     try:
@@ -41,7 +42,7 @@ async def source_candidates_task(
 
         log.info(
             f"[bg_task] Starting | sourcing_id={sourcing_id} job_id={job_id} "
-            f"role='{role}' mode={mode} count={count}"
+            f"role='{role}' mode={mode} count={count} triggered_by={triggered_by}"
         )
 
         async with get_async_session() as db:
@@ -54,11 +55,12 @@ async def source_candidates_task(
                 count=count,
                 mode=mode,
                 sourcing_id=sourcing_id,
+                triggered_by=triggered_by,   # ← forwarded
             )
 
         log.info(
             f"[bg_task] Done | sourcing_id={sourcing_id} job_id={job_id} "
-            f"total_found={result.get('total_found', '?')}"
+            f"total_found={result.total_found}"
         )
 
     except Exception as exc:
@@ -66,3 +68,7 @@ async def source_candidates_task(
             f"[bg_task] FAILED | sourcing_id={sourcing_id} job_id={job_id} | {exc}",
             exc_info=True,
         )
+        from src.data.clients.postgres_client import get_async_session
+        from src.data.repositories.sourcing_repo import fail_sourcing
+        async with get_async_session() as db:
+            await fail_sourcing(db, sourcing_id=sourcing_id)

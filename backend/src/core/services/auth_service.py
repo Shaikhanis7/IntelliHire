@@ -24,16 +24,15 @@ from src.core.exceptions.auth_exceptions import (
 async def register_user(db, email: str, password: str, role: str, name: str):
     existing = await get_user_by_email(db, email)
     if existing:
-        # Message contains 'already' → frontend shows
-        # "An account with this email already exists. Try signing in instead."
-        raise UserAlreadyExists()
+        raise UserAlreadyExists("An account with this email already exists.")
  
-    user = await create_user(db, email, hash_password(password), role)
+    hashed = hash_password(password)          # your existing helper
+    user = await create_user(db, email=email, password=hashed, role=role, name=name)
+
     if role == "candidate":
-        await create_candidate(db, user.id, name)
+            await create_candidate(db, user.id, name)
     return user
- 
- 
+
 async def login_user(db, email: str, password: str) -> dict:
     user = await get_user_by_email(db, email)
  
@@ -51,10 +50,12 @@ async def login_user(db, email: str, password: str) -> dict:
         "sub":  user.email,
         "id":   user.id,
         "role": user.role,
+        "name": user.name  
     })
     refresh = create_refresh_token_jwt({
         "sub": user.email,
         "id":  user.id,
+        "name": user.name
     })
     await store_refresh_token(db, refresh, user.id)
  
@@ -68,20 +69,23 @@ async def refresh_token_service(db, old_token: str) -> dict:
     token_obj = await get_refresh_token(db, old_token)
     if not token_obj or token_obj.is_revoked:
         raise InvalidToken()
- 
+
     payload = decode_token(old_token)
     await revoke_refresh_token(db, old_token)
- 
+
     new_access = create_access_token({
-        "sub": payload["sub"],
-        "id":  payload["id"],
+        "sub":  payload["sub"],
+        "id":   payload["id"],
+        "role": payload.get("role"),   # carry forward
+        "name": payload.get("name"),   # ← carry forward from old token
     })
     new_refresh = create_refresh_token_jwt({
-        "sub": payload["sub"],
-        "id":  payload["id"],
+        "sub":  payload["sub"],
+        "id":   payload["id"],
+        "name": payload.get("name"),   # ← carry forward
     })
     await store_refresh_token(db, new_refresh, payload["id"])
- 
+
     return {
         "access_token":  new_access,
         "refresh_token": new_refresh,

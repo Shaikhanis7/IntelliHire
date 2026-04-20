@@ -1,7 +1,4 @@
 // features/admin/components/CreateRecruiterFAB.tsx
-//
-// Drop this anywhere inside DashboardLayout (or DashboardPage).
-// It renders nothing if the logged-in user is not an admin.
 
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
@@ -13,7 +10,7 @@ import {
 import { adminService } from '../services/admin.service';
 import type { RootState } from '../../../app/store';
 
-/* ── Design tokens (mirrors DashboardPage palette) ──────────────────────── */
+/* ── Design tokens ──────────────────────────────────────────────────────── */
 const T = {
   primary:      '#1a56db',
   primaryDark:  '#1e40af',
@@ -37,15 +34,15 @@ const T = {
 
 /* ── Reusable labelled input ─────────────────────────────────────────────── */
 interface FieldProps {
-  label:       string;
-  type?:       string;
-  value:       string;
-  onChange:    (v: string) => void;
+  label:        string;
+  type?:        string;
+  value:        string;
+  onChange:     (v: string) => void;
   placeholder?: string;
-  icon:        React.ReactNode;
-  error?:      string;
-  right?:      React.ReactNode;   // e.g. password toggle
-  disabled?:   boolean;
+  icon:         React.ReactNode;
+  error?:       string;
+  right?:       React.ReactNode;
+  disabled?:    boolean;
 }
 
 const Field: React.FC<FieldProps> = ({
@@ -59,7 +56,6 @@ const Field: React.FC<FieldProps> = ({
         {label}
       </label>
       <div style={{ position: 'relative' }}>
-        {/* leading icon */}
         <span style={{
           position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)',
           color: focused ? T.primary : T.gray400, display: 'flex', transition: 'color 0.15s',
@@ -83,10 +79,10 @@ const Field: React.FC<FieldProps> = ({
             color: T.gray900, outline: 'none',
             transition: 'border-color 0.15s, box-shadow 0.15s',
             boxShadow: focused && !error ? `0 0 0 3px ${T.primary}18` : 'none',
+            boxSizing: 'border-box',
           }}
         />
 
-        {/* trailing slot (password toggle, etc.) */}
         {right && (
           <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', display: 'flex' }}>
             {right}
@@ -106,7 +102,13 @@ const Field: React.FC<FieldProps> = ({
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
-const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+interface CreateRecruiterModalProps {
+  onClose:     () => void;
+  /** Called after a recruiter is successfully created. */
+  onCreated?:  () => void;
+}
+
+export const CreateRecruiterModal: React.FC<CreateRecruiterModalProps> = ({ onClose, onCreated }) => {
   const [name,     setName]     = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
@@ -117,11 +119,11 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!name.trim())                                   e.name = 'Name is required.';
-    if (!email.trim())                                  e.email = 'Email is required.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = 'Enter a valid email.';
-    if (!password)                                      e.password = 'Password is required.';
-    else if (password.length < 8)                       e.password = 'Minimum 8 characters.';
+    if (!name.trim())                                    e.name     = 'Name is required.';
+    if (!email.trim())                                   e.email    = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email    = 'Enter a valid email.';
+    if (!password)                                       e.password = 'Password is required.';
+    else if (password.length < 8)                        e.password = 'Minimum 8 characters.';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -133,6 +135,7 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
     try {
       await adminService.createRecruiter({ name, email, password });
       setStatus('success');
+      onCreated?.();
     } catch (err: any) {
       setApiError(
         err?.response?.data?.detail ?? 'Something went wrong. Please try again.',
@@ -149,7 +152,6 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
   const busy = status === 'loading';
 
   return (
-    /* ── Backdrop ── */
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{
@@ -168,7 +170,7 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
         overflow: 'hidden',
       }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div style={{
           padding: '20px 24px 16px',
           borderBottom: `1px solid ${T.gray200}`,
@@ -204,10 +206,8 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
           </button>
         </div>
 
-        {/* ── Body ── */}
+        {/* Body */}
         <div style={{ padding: '24px 24px 20px' }}>
-
-          {/* ─ Success state ─ */}
           {status === 'success' ? (
             <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
               <div style={{
@@ -225,12 +225,10 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
               </p>
               <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
                 <button onClick={handleReset} style={secondaryBtn}>Create another</button>
-                <button onClick={onClose}    style={primaryBtn}>Done</button>
+                <button onClick={onClose}     style={primaryBtn}>Done</button>
               </div>
             </div>
-
           ) : (
-            /* ─ Form ─ */
             <>
               <Field
                 label="Full Name"
@@ -270,7 +268,6 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                 }
               />
 
-              {/* API error banner */}
               {apiError && (
                 <div style={{
                   padding: '10px 14px', borderRadius: 9, marginBottom: 16,
@@ -282,7 +279,6 @@ const CreateRecruiterModal: React.FC<{ onClose: () => void }> = ({ onClose }) =>
                 </div>
               )}
 
-              {/* Actions */}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={onClose} style={{ ...secondaryBtn, flex: 1 }} disabled={busy}>
                   Cancel
@@ -324,13 +320,12 @@ const secondaryBtn: React.CSSProperties = {
   cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.18s',
 };
 
-/* ── FAB — the floating action button ───────────────────────────────────── */
+/* ── FAB ─────────────────────────────────────────────────────────────────── */
 export const CreateRecruiterFAB: React.FC = () => {
   const { user } = useSelector((s: RootState) => s.auth);
   const [open,  setOpen]  = useState(false);
-  const [label, setLabel] = useState(false);   // show tooltip label
+  const [label, setLabel] = useState(false);
 
-  // Render nothing for non-admins
   if (user?.role !== 'admin') return null;
 
   return (
@@ -341,10 +336,7 @@ export const CreateRecruiterFAB: React.FC = () => {
         @keyframes spin    { to   { transform: rotate(360deg); } }
       `}</style>
 
-      {/* ── Floating button ── */}
       <div style={{ position: 'fixed', right: 28, bottom: 28, zIndex: 900 }}>
-
-        {/* Tooltip label */}
         {label && (
           <div style={{
             position: 'absolute', right: 58, top: '50%', transform: 'translateY(-50%)',
@@ -354,7 +346,6 @@ export const CreateRecruiterFAB: React.FC = () => {
             pointerEvents: 'none', animation: 'fadeIn 0.15s ease',
           }}>
             Create Recruiter
-            {/* Arrow */}
             <span style={{
               position: 'absolute', right: -5, top: '50%', transform: 'translateY(-50%)',
               width: 0, height: 0,
@@ -372,21 +363,22 @@ export const CreateRecruiterFAB: React.FC = () => {
           title="Create Recruiter"
           style={{
             width: 52, height: 52, borderRadius: '50%',
-            background: `linear-gradient(145deg, #1246a8 0%, #1a5ae0 55%, #2d77f7 100%)`,
+            background: 'linear-gradient(145deg, #1246a8 0%, #1a5ae0 55%, #2d77f7 100%)',
             border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 6px 24px rgba(26,86,219,0.38)',
             transition: 'transform 0.18s, box-shadow 0.18s',
           }}
           onMouseDown={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.94)'; }}
-          onMouseUp  ={e => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
+          onMouseUp={e =>   { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
         >
           <UserPlus size={20} color={T.white} />
         </button>
       </div>
 
-      {/* ── Modal ── */}
-      {open && <CreateRecruiterModal onClose={() => setOpen(false)} />}
+      {open && (
+        <CreateRecruiterModal onClose={() => setOpen(false)} />
+      )}
     </>
   );
 };
